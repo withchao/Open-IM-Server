@@ -49,6 +49,15 @@ tools.install.%:
 	@$(MAKE) install.$*
 
 ## tools.install-all.%: Parallelism install a single tool in ./tools/*
+## install.codegen: Install codegen
+.PHONY: install.codegen
+install.codegen:
+	@$(GO) install github.com/yourorg/codegen@latest
+
+## tools.install.codegen: Install codegen tool
+.PHONY: tools.install.codegen
+tools.install.codegen:
+	@$(MAKE) install.codegen
 .PHONY: tools.install-all.%
 tools.install-all.%:
 	@echo "===========> Installing $,The default installation path is $(TOOLS_DIR)/$*"
