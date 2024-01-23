@@ -124,6 +124,10 @@ func (s *userServer) UpdateUserInfo(ctx context.Context, req *pbuser.UpdateUserI
 	if err != nil {
 		return nil, err
 	}
+	oldUserInfo, err := s.UserDatabase.GetUserByID(ctx, req.UserInfo.UserID)
+	if err != nil {
+		return nil, err
+	}
 	if err := CallbackBeforeUpdateUserInfo(ctx, req); err != nil {
 		return nil, err
 	}
@@ -137,8 +141,13 @@ func (s *userServer) UpdateUserInfo(ctx context.Context, req *pbuser.UpdateUserI
 		return nil, err
 	}
 	if req.UserInfo.Nickname != "" || req.UserInfo.FaceURL != "" {
-		if err := s.groupRpcClient.NotificationUserInfoUpdate(ctx, req.UserInfo.UserID); err != nil {
-			log.ZError(ctx, "NotificationUserInfoUpdate", err)
+		newUserInfo, err := s.UserDatabase.GetUserByID(ctx, req.UserInfo.UserID)
+		if err != nil {
+			log.ZError(ctx, "GetUserByID", err, "userID", req.UserInfo.UserID)
+		} else {
+			if err := s.groupRpcClient.NotificationUserInfoUpdate(ctx, req.UserInfo.UserID, convert.UserDB2Pb(oldUserInfo), convert.UserDB2Pb(newUserInfo)); err != nil {
+				log.ZError(ctx, "NotificationUserInfoUpdate", err)
+			}
 		}
 	}
 	for _, friendID := range friends {
@@ -146,9 +155,6 @@ func (s *userServer) UpdateUserInfo(ctx context.Context, req *pbuser.UpdateUserI
 	}
 	if err := CallbackAfterUpdateUserInfo(ctx, req); err != nil {
 		return nil, err
-	}
-	if err := s.groupRpcClient.NotificationUserInfoUpdate(ctx, req.UserInfo.UserID); err != nil {
-		log.ZError(ctx, "NotificationUserInfoUpdate", err, "userID", req.UserInfo.UserID)
 	}
 	return resp, nil
 }
@@ -158,7 +164,10 @@ func (s *userServer) UpdateUserInfoEx(ctx context.Context, req *pbuser.UpdateUse
 	if err != nil {
 		return nil, err
 	}
-
+	oldUserInfo, err := s.UserDatabase.GetUserByID(ctx, req.UserInfo.UserID)
+	if err != nil {
+		return nil, err
+	}
 	if err = CallbackBeforeUpdateUserInfoEx(ctx, req); err != nil {
 		return nil, err
 	}
@@ -172,8 +181,13 @@ func (s *userServer) UpdateUserInfoEx(ctx context.Context, req *pbuser.UpdateUse
 		return nil, err
 	}
 	if req.UserInfo.Nickname != nil || req.UserInfo.FaceURL != nil {
-		if err := s.groupRpcClient.NotificationUserInfoUpdate(ctx, req.UserInfo.UserID); err != nil {
-			log.ZError(ctx, "NotificationUserInfoUpdate", err)
+		newUserInfo, err := s.UserDatabase.GetUserByID(ctx, req.UserInfo.UserID)
+		if err != nil {
+			log.ZError(ctx, "GetUserByID", err, "userID", req.UserInfo.UserID)
+		} else {
+			if err := s.groupRpcClient.NotificationUserInfoUpdate(ctx, req.UserInfo.UserID, convert.UserDB2Pb(oldUserInfo), convert.UserDB2Pb(newUserInfo)); err != nil {
+				log.ZError(ctx, "NotificationUserInfoUpdate", err)
+			}
 		}
 	}
 	for _, friendID := range friends {
@@ -181,9 +195,6 @@ func (s *userServer) UpdateUserInfoEx(ctx context.Context, req *pbuser.UpdateUse
 	}
 	if err := CallbackAfterUpdateUserInfoEx(ctx, req); err != nil {
 		return nil, err
-	}
-	if err := s.groupRpcClient.NotificationUserInfoUpdate(ctx, req.UserInfo.UserID); err != nil {
-		log.ZError(ctx, "NotificationUserInfoUpdate", err, "userID", req.UserInfo.UserID)
 	}
 	return resp, nil
 }

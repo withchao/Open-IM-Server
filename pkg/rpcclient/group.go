@@ -209,9 +209,11 @@ func (g *GroupRpcClient) DismissGroup(ctx context.Context, groupID string) error
 	return err
 }
 
-func (g *GroupRpcClient) NotificationUserInfoUpdate(ctx context.Context, userID string) error {
+func (g *GroupRpcClient) NotificationUserInfoUpdate(ctx context.Context, userID string, oldInfo, newInfo *sdkws.UserInfo) error {
 	_, err := g.Client.NotificationUserInfoUpdate(ctx, &group.NotificationUserInfoUpdateReq{
-		UserID: userID,
+		UserID:      userID,
+		OldUserInfo: oldInfo,
+		NewUserInfo: newInfo,
 	})
 	return err
 }

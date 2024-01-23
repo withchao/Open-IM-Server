@@ -110,27 +110,60 @@ type groupServer struct {
 
 func (s *groupServer) NotificationUserInfoUpdate(ctx context.Context, req *pbgroup.NotificationUserInfoUpdateReq) (*pbgroup.NotificationUserInfoUpdateResp, error) {
 	defer log.ZDebug(ctx, "NotificationUserInfoUpdate return")
+	if req.OldUserInfo == nil || req.NewUserInfo == nil {
+		return nil, errs.ErrArgs.Wrap("OldUserInfo or NewUserInfo is nil")
+	}
+	if req.OldUserInfo.Nickname == req.NewUserInfo.Nickname && req.OldUserInfo.FaceURL == req.NewUserInfo.FaceURL {
+		log.ZDebug(ctx, "NotificationUserInfoUpdate new and old names have equal avatars")
+		return &pbgroup.NotificationUserInfoUpdateResp{}, nil
+	}
+	if !(req.UserID == req.OldUserInfo.UserID && req.UserID == req.NewUserInfo.UserID) {
+		return nil, errs.ErrArgs.Wrap("userID different")
+	}
+
 	members, err := s.db.FindGroupMemberUser(ctx, nil, req.UserID)
 	if err != nil {
 		return nil, err
 	}
-	groupIDs := make([]string, 0, len(members))
+	type Item struct {
+		GroupID  string
+		Nickname bool
+		FaceURL  bool
+	}
+	updates := make([]Item, 0, len(members))
 	for _, member := range members {
-		if member.Nickname != "" && member.FaceURL != "" {
-			continue
+		item := Item{
+			GroupID:  member.GroupID,
+			Nickname: member.Nickname == "" || member.Nickname == req.OldUserInfo.Nickname,
+			FaceURL:  member.FaceURL == "" || member.FaceURL == req.OldUserInfo.FaceURL,
 		}
-		groupIDs = append(groupIDs, member.GroupID)
-	}
-	log.ZInfo(ctx, "NotificationUserInfoUpdate", "joinGroupNum", len(members), "updateNum", len(groupIDs), "updateGroupIDs", groupIDs)
-	for _, groupID := range groupIDs {
-		if err := s.Notification.GroupMemberInfoSetNotification(ctx, groupID, req.UserID); err != nil {
-			log.ZError(ctx, "NotificationUserInfoUpdate setGroupMemberInfo notification failed", err, "groupID", groupID)
+		if item.Nickname || item.FaceURL {
+			updates = append(updates, item)
 		}
 	}
+	groupIDs := make([]string, 0, len(updates))
+	for _, item := range updates {
+		groupIDs = append(groupIDs, item.GroupID)
+		update := make(map[string]any, 2)
+		if item.Nickname {
+			update["nickname"] = req.NewUserInfo.Nickname
+		}
+		if item.FaceURL {
+			update["face_url"] = req.NewUserInfo.FaceURL
+		}
+		if err := s.db.UpdateGroupMember(ctx, item.GroupID, req.UserID, update); err != nil {
+			log.ZError(ctx, "NotificationUserInfoUpdate UpdateGroupMember", err, "update", update, "groupID", item.GroupID, "userID", req.UserID)
+		}
+	}
+	log.ZDebug(ctx, "update groups", "groupIDs", groupIDs)
 	if err := s.db.DeleteGroupMemberHash(ctx, groupIDs); err != nil {
 		log.ZError(ctx, "NotificationUserInfoUpdate DeleteGroupMemberHash", err, "groupID", groupIDs)
 	}
-
+	for _, groupID := range groupIDs {
+		if err := s.Notification.GroupMemberInfoSetNotification(ctx, groupID, req.UserID); err != nil {
+			log.ZError(ctx, "NotificationUserInfoUpdate setGroupMemberInfo notification failed", err, "groupID", groupID, "userID", req.UserID)
+		}
+	}
 	return &pbgroup.NotificationUserInfoUpdateResp{}, nil
 }
 
@@ -228,9 +261,12 @@ func (s *groupServer) CreateGroup(ctx context.Context, req *pbgroup.CreateGroupR
 		return nil, err
 	}
 	joinGroup := func(userID string, roleLevel int32) error {
+		user := userMap[userID]
 		groupMember := &relationtb.GroupMemberModel{
 			GroupID:        group.GroupID,
 			UserID:         userID,
+			Nickname:       user.Nickname,
+			FaceURL:        user.FaceURL,
 			RoleLevel:      roleLevel,
 			OperatorUserID: opUserID,
 			JoinSource:     constant.JoinByInvitation,
@@ -431,9 +467,12 @@ func (s *groupServer) InviteUserToGroup(ctx context.Context, req *pbgroup.Invite
 	}
 	var groupMembers []*relationtb.GroupMemberModel
 	for _, userID := range req.InvitedUserIDs {
+		user := userMap[userID]
 		member := &relationtb.GroupMemberModel{
 			GroupID:        req.GroupID,
 			UserID:         userID,
+			Nickname:       user.Nickname,
+			FaceURL:        user.FaceURL,
 			RoleLevel:      constant.GroupOrdinaryUsers,
 			OperatorUserID: opUserID,
 			InviterUserID:  opUserID,
@@ -765,7 +804,8 @@ func (s *groupServer) GroupApplicationResponse(ctx context.Context, req *pbgroup
 	} else if !s.IsNotFound(err) {
 		return nil, err
 	}
-	if _, err := s.User.GetPublicUserInfo(ctx, req.FromUserID); err != nil {
+	user, err := s.User.GetPublicUserInfo(ctx, req.FromUserID)
+	if err != nil {
 		return nil, err
 	}
 	var member *relationtb.GroupMemberModel
@@ -773,8 +813,8 @@ func (s *groupServer) GroupApplicationResponse(ctx context.Context, req *pbgroup
 		member = &relationtb.GroupMemberModel{
 			GroupID:        req.GroupID,
 			UserID:         req.FromUserID,
-			Nickname:       "",
-			FaceURL:        "",
+			Nickname:       user.Nickname,
+			FaceURL:        user.FaceURL,
 			RoleLevel:      constant.GroupOrdinaryUsers,
 			JoinTime:       time.Now(),
 			JoinSource:     groupRequest.JoinSource,
@@ -846,6 +886,8 @@ func (s *groupServer) JoinGroup(ctx context.Context, req *pbgroup.JoinGroupReq) 
 		groupMember := &relationtb.GroupMemberModel{
 			GroupID:        group.GroupID,
 			UserID:         user.UserID,
+			Nickname:       user.Nickname,
+			FaceURL:        user.FaceURL,
 			RoleLevel:      constant.GroupOrdinaryUsers,
 			OperatorUserID: mcontext.GetOpUserID(ctx),
 			InviterUserID:  req.InviterUserID,

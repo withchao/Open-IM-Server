@@ -22,6 +22,18 @@ import (
 	relationtb "github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 )
 
+func UserDB2Pb(user *relationtb.UserModel) *sdkws.UserInfo {
+	return &sdkws.UserInfo{
+		UserID:           user.UserID,
+		Nickname:         user.Nickname,
+		FaceURL:          user.FaceURL,
+		Ex:               user.Ex,
+		CreateTime:       user.CreateTime.UnixMilli(),
+		AppMangerLevel:   user.AppMangerLevel,
+		GlobalRecvMsgOpt: user.GlobalRecvMsgOpt,
+	}
+}
+
 func UsersDB2Pb(users []*relationtb.UserModel) []*sdkws.UserInfo {
 	result := make([]*sdkws.UserInfo, 0, len(users))
 	for _, user := range users {
@@ -56,19 +68,20 @@ func UserPb2DBMap(user *sdkws.UserInfo) map[string]any {
 		return nil
 	}
 	val := make(map[string]any)
-	fields := map[string]any{
-		"nickname":            user.Nickname,
-		"face_url":            user.FaceURL,
-		"ex":                  user.Ex,
-		"app_manager_level":   user.AppMangerLevel,
-		"global_recv_msg_opt": user.GlobalRecvMsgOpt,
+	if user.Nickname != "" {
+		val["nickname"] = user.Nickname
 	}
-	for key, value := range fields {
-		if v, ok := value.(string); ok && v != "" {
-			val[key] = v
-		} else if v, ok := value.(int32); ok && v != 0 {
-			val[key] = v
-		}
+	if user.FaceURL != "" {
+		val["face_url"] = user.FaceURL
+	}
+	if user.Ex != "" {
+		val["ex"] = user.Ex
+	}
+	if user.AppMangerLevel != 0 {
+		val["app_manager_level"] = user.AppMangerLevel
+	}
+	if user.GlobalRecvMsgOpt != 0 {
+		val["global_recv_msg_opt"] = user.GlobalRecvMsgOpt
 	}
 	return val
 }
