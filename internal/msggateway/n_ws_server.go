@@ -104,21 +104,9 @@ func (ws *WsServer) SetDiscoveryRegistry(disCov discoveryregistry.SvcDiscoveryRe
 }
 
 func (ws *WsServer) SetUserOnlineStatus(ctx context.Context, client *Client, status int32) {
-	err := ws.userClient.SetUserStatus(ctx, client.UserID, status, client.PlatformID)
+	err := ws.userClient.SetUserStatus(ctx, client.UserID, status, client.PlatformID, client.ctx.GetConnID(), client.IsBackground)
 	if err != nil {
 		log.ZWarn(ctx, "SetUserStatus err", err)
-	}
-	switch status {
-	case constant.Online:
-		err := CallbackUserOnline(ctx, client.UserID, client.PlatformID, client.IsBackground, client.ctx.GetConnID())
-		if err != nil {
-			log.ZWarn(ctx, "CallbackUserOnline err", err)
-		}
-	case constant.Offline:
-		err := CallbackUserOffline(ctx, client.UserID, client.PlatformID, client.ctx.GetConnID())
-		if err != nil {
-			log.ZWarn(ctx, "CallbackUserOffline err", err)
-		}
 	}
 }
 

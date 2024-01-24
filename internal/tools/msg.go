@@ -85,7 +85,7 @@ func InitMsgTool() (*MsgTool, error) {
 		return nil, err
 	}
 	msgDatabase := controller.InitCommonMsgDatabase(rdb, mongo.GetDatabase())
-	userMongoDB := unrelation.NewUserMongoDriver(mongo.GetDatabase())
+	userMongoDB := unrelation.NewUserStatus(rdb)
 	ctxTx := tx.NewMongo(mongo.GetClient())
 	userDatabase := controller.NewUserDatabase(
 		userDB,
