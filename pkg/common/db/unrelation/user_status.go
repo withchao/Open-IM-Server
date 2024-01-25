@@ -10,11 +10,17 @@ import (
 )
 
 func NewUserStatus(rdb redis.UniversalClient) unrelation.UserModelInterface {
-	return &UserStatus{rdb: rdb}
+	return &UserStatus{
+		rdb:                    rdb,
+		subscriptionExpiration: time.Hour * 1,
+		onlineExpiration:       time.Hour * 24,
+	}
 }
 
 type UserStatus struct {
-	rdb redis.UniversalClient
+	rdb                    redis.UniversalClient
+	subscriptionExpiration time.Duration
+	onlineExpiration       time.Duration
 }
 
 func str2any(userIDs []string) []any {
@@ -53,10 +59,9 @@ redis.call("SADD", KEYS[1] .. ARGV[1], unpack(userIDs))
 redis.call("EXPIRE", KEYS[1] .. ARGV[1], ARGV[2])
 return 1
 `
-	expiration := time.Hour
 	keys := []string{cachekey.SubscriptionKey, cachekey.SubscribedKey}
 	argv := make([]any, 0, len(userIDList)+2)
-	argv = append(argv, userID, expiration.Seconds())
+	argv = append(argv, userID, u.subscriptionExpiration.Seconds())
 	for _, uid := range userIDList {
 		argv = append(argv, uid)
 	}
@@ -81,27 +86,51 @@ func (u *UserStatus) SetUserOnline(ctx context.Context, userID string, connID st
 	script := `
 local exist = redis.call("HSETNX", KEYS[1], ARGV[1], ARGV[2])
 redis.call("EXPIRE", KEYS[1], ARGV[3])
-if not exist then
-	return 1
+if exist == 0 then
+	return 0
 end
 local value = redis.call("HINCRBY", KEYS[2], ARGV[2], 1)
 redis.call("EXPIRE", KEYS[2], ARGV[3])
-if value == 1 then
-	return 2
-else
-	return 3
-end
+return value
 `
 	keys := []string{u.GetUserStateConnKey(userID), u.GetUserStatePlatformKey(userID)}
-	argv := []any{connID, platformID, time.Hour.Seconds()}
+	argv := []any{connID, platformID, u.onlineExpiration.Seconds()}
 	val, err := u.rdb.Eval(ctx, script, keys, argv...).Int64()
 	if err != nil {
 		return false, err
 	}
-	return val == 2, nil
+	return val == 1, nil
 }
 
-func (u *UserStatus) SetUserOffline(ctx context.Context, userID string, platformID int32) error {
-
-	return nil
+func (u *UserStatus) SetUserOffline(ctx context.Context, userID string, connID string) (bool, error) {
+	script := `
+local platformID = redis.call("HGET", KEYS[1], ARGV[1])
+redis.call("EXPIRE", KEYS[1], ARGV[3])
+if exist == 0 then
+	return 0
+end
+local value = redis.call("HINCRBY", KEYS[2], ARGV[2], 1)
+redis.call("EXPIRE", KEYS[2], ARGV[3])
+return value
+`
+	script = `
+local platformID = redis.call("HGET", KEYS[1], ARGV[1])
+if platformID == false or platformID == nil then
+	return -1
+end
+redis.call("HDEL", KEYS[1], ARGV[1])
+local value = redis.call("HINCRBY", KEYS[2], platformID, -1)
+if value <= 0 then
+	redis.call("HDEL", KEYS[2], platformID)
+	return 0
+end
+return value
+`
+	keys := []string{u.GetUserStateConnKey(userID), u.GetUserStatePlatformKey(userID)}
+	argv := []any{connID, "platformID", time.Hour.Seconds()}
+	val, err := u.rdb.Eval(ctx, script, keys, argv...).Int64()
+	if err != nil {
+		return false, err
+	}
+	return val == 0, nil
 }

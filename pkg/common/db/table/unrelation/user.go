@@ -42,4 +42,8 @@ type UserModelInterface interface {
 	GetAllSubscribeList(ctx context.Context, userID string) (userIDList []string, err error)
 	// GetSubscribedList Get the user subscribed by those users
 	GetSubscribedList(ctx context.Context, userID string) (userIDList []string, err error)
+
+	SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error)
+
+	SetUserOffline(ctx context.Context, userID string, connID string) (bool, error)
 }

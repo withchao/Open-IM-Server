@@ -76,8 +76,9 @@ type UserDatabase interface {
 	GetSubscribedList(ctx context.Context, userID string) ([]string, error)
 	// GetUserStatus Get the online status of the user
 	GetUserStatus(ctx context.Context, userIDs []string) ([]*user.OnlineStatus, error)
-	// SetUserStatus Set the user status and store the user status in redis
-	SetUserStatus(ctx context.Context, userID string, status, platformID int32) error
+
+	SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error)
+	SetUserOffline(ctx context.Context, userID string, connID string) (bool, error)
 
 	//CRUD user command
 	AddUserCommand(ctx context.Context, userID string, Type int32, UUID string, value string, ex string) error
@@ -88,14 +89,14 @@ type UserDatabase interface {
 }
 
 type userDatabase struct {
-	tx      tx.CtxTx
-	userDB  relation.UserModelInterface
-	cache   cache.UserCache
-	mongoDB unrelationtb.UserModelInterface
+	tx           tx.CtxTx
+	userDB       relation.UserModelInterface
+	cache        cache.UserCache
+	userStatusDB unrelationtb.UserModelInterface
 }
 
 func NewUserDatabase(userDB relation.UserModelInterface, cache cache.UserCache, tx tx.CtxTx, mongoDB unrelationtb.UserModelInterface) UserDatabase {
-	return &userDatabase{userDB: userDB, cache: cache, tx: tx, mongoDB: mongoDB}
+	return &userDatabase{userDB: userDB, cache: cache, tx: tx, userStatusDB: mongoDB}
 }
 
 func (u *userDatabase) InitOnce(ctx context.Context, users []*relation.UserModel) error {
@@ -234,19 +235,19 @@ func (u *userDatabase) CountRangeEverydayTotal(ctx context.Context, start time.T
 
 // SubscribeUsersStatus Subscribe or unsubscribe a user's presence status.
 func (u *userDatabase) SubscribeUsersStatus(ctx context.Context, userID string, userIDs []string) error {
-	err := u.mongoDB.AddSubscriptionList(ctx, userID, userIDs)
+	err := u.userStatusDB.AddSubscriptionList(ctx, userID, userIDs)
 	return err
 }
 
 // UnsubscribeUsersStatus unsubscribe a user's presence status.
 func (u *userDatabase) UnsubscribeUsersStatus(ctx context.Context, userID string, userIDs []string) error {
-	err := u.mongoDB.UnsubscriptionList(ctx, userID, userIDs)
+	err := u.userStatusDB.UnsubscriptionList(ctx, userID, userIDs)
 	return err
 }
 
 // GetAllSubscribeList Get a list of all subscriptions.
 func (u *userDatabase) GetAllSubscribeList(ctx context.Context, userID string) ([]string, error) {
-	list, err := u.mongoDB.GetAllSubscribeList(ctx, userID)
+	list, err := u.userStatusDB.GetAllSubscribeList(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +256,7 @@ func (u *userDatabase) GetAllSubscribeList(ctx context.Context, userID string) (
 
 // GetSubscribedList Get all subscribed lists.
 func (u *userDatabase) GetSubscribedList(ctx context.Context, userID string) ([]string, error) {
-	list, err := u.mongoDB.GetSubscribedList(ctx, userID)
+	list, err := u.userStatusDB.GetSubscribedList(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -268,10 +269,19 @@ func (u *userDatabase) GetUserStatus(ctx context.Context, userIDs []string) ([]*
 	return onlineStatusList, err
 }
 
-// SetUserStatus Set the user status and save it in redis.
-func (u *userDatabase) SetUserStatus(ctx context.Context, userID string, status, platformID int32) error {
-	return u.cache.SetUserStatus(ctx, userID, status, platformID)
+func (u *userDatabase) SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error) {
+	return u.userStatusDB.SetUserOnline(ctx, userID, connID, platformID)
 }
+
+func (u *userDatabase) SetUserOffline(ctx context.Context, userID string, connID string) (bool, error) {
+	return u.userStatusDB.SetUserOffline(ctx, userID, connID)
+}
+
+// SetUserStatus Set the user status and save it in redis.
+//
+//	func (u *userDatabase) SetUserStatus(ctx context.Context, userID string, status, platformID int32) error {
+//		return u.cache.SetUserStatus(ctx, userID, status, platformID)
+//	}
 func (u *userDatabase) AddUserCommand(ctx context.Context, userID string, Type int32, UUID string, value string, ex string) error {
 	return u.userDB.AddUserCommand(ctx, userID, Type, UUID, value, ex)
 }

@@ -48,58 +48,53 @@ func (s *userServer) GetSubscribeUsersStatus(ctx context.Context, req *pbuser.Ge
 	return &pbuser.GetSubscribeUsersStatusResp{StatusList: onlineStatusList}, nil
 }
 
-// SetUserStatus Synchronize user's online status.
-func (s *userServer) SetUserStatus(ctx context.Context, req *pbuser.SetUserStatusReq) (resp *pbuser.SetUserStatusResp, err error) {
-	if !(req.Status == constant.Online || req.Status == constant.Offline) {
-		return nil, errs.ErrArgs.Wrap("status invalid")
-	}
-	// setnx
-	// userID + connID
-
-	/*
-
-			setnx
-			userID + connID
-
-			{
-				"connID": "PlatformID",
-			}
-
-		    {
-				"connID": NUM,
-			}
-
-
-
-	*/
-
-	err = s.UserDatabase.SetUserStatus(ctx, req.UserID, req.Status, req.PlatformID)
+func (s *userServer) UserStatusChangeNotification(ctx context.Context, userID string, status int32, platformID int32) {
+	list, err := s.UserDatabase.GetSubscribedList(ctx, userID)
 	if err != nil {
-		return nil, err
+		log.ZError(ctx, "GetSubscribedList err", err)
+		return
 	}
-	list, err := s.UserDatabase.GetSubscribedList(ctx, req.UserID)
-	if err != nil {
-		return nil, err
-	}
-	for _, userID := range list {
+	for _, uid := range list {
 		tips := &sdkws.UserStatusChangeTips{
-			FromUserID: req.UserID,
-			ToUserID:   userID,
-			Status:     req.Status,
-			PlatformID: req.PlatformID,
+			FromUserID: userID,
+			ToUserID:   uid,
+			Status:     status,
+			PlatformID: platformID,
 		}
 		s.userNotificationSender.UserStatusChangeNotification(ctx, tips)
 	}
+}
+
+// SetUserStatus Synchronize user's online status.
+func (s *userServer) SetUserStatus(ctx context.Context, req *pbuser.SetUserStatusReq) (*pbuser.SetUserStatusResp, error) {
+	var (
+		first bool
+		err   error
+	)
 	switch req.Status {
 	case constant.Online:
-		err := msggateway.CallbackUserOnline(ctx, req.UserID, int(req.PlatformID), req.IsBackground, req.ConnID)
-		if err != nil {
-			log.ZWarn(ctx, "CallbackUserOnline err", err)
-		}
+		first, err = s.UserDatabase.SetUserOnline(ctx, req.UserID, req.ConnID, req.PlatformID)
 	case constant.Offline:
-		err := msggateway.CallbackUserOffline(ctx, req.UserID, int(req.PlatformID), req.ConnID)
-		if err != nil {
-			log.ZWarn(ctx, "CallbackUserOffline err", err)
+		first, err = s.UserDatabase.SetUserOffline(ctx, req.UserID, req.ConnID)
+	default:
+		err = errs.ErrArgs.Wrap("status invalid")
+	}
+	if err != nil {
+		return nil, err
+	}
+	if first {
+		s.UserStatusChangeNotification(ctx, req.UserID, req.Status, req.PlatformID)
+		switch req.Status {
+		case constant.Online:
+			err := msggateway.CallbackUserOnline(ctx, req.UserID, int(req.PlatformID), req.IsBackground, req.ConnID)
+			if err != nil {
+				log.ZWarn(ctx, "CallbackUserOnline err", err)
+			}
+		case constant.Offline:
+			err := msggateway.CallbackUserOffline(ctx, req.UserID, int(req.PlatformID), req.ConnID)
+			if err != nil {
+				log.ZWarn(ctx, "CallbackUserOffline err", err)
+			}
 		}
 	}
 	return &pbuser.SetUserStatusResp{}, nil
