@@ -46,4 +46,6 @@ type UserModelInterface interface {
 	SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error)
 
 	SetUserOffline(ctx context.Context, userID string, connID string) (bool, error)
+
+	GetUserOnline(ctx context.Context, userID string) ([]int32, error)
 }

@@ -10,6 +10,27 @@ import (
 	"github.com/openimsdk/open-im-server/v3/internal/msggateway"
 )
 
+func (s *userServer) getUserStatus(ctx context.Context, userIDs []string) ([]*pbuser.OnlineStatus, error) {
+	statusList := make([]*pbuser.OnlineStatus, 0, len(userIDs))
+	for _, userID := range userIDs {
+		platformIDs, err := s.UserDatabase.GetUserOnline(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		status := pbuser.OnlineStatus{
+			UserID:      userID,
+			PlatformIDs: platformIDs,
+		}
+		if len(platformIDs) > 0 {
+			status.Status = constant.Online
+		} else {
+			status.Status = constant.Offline
+		}
+		statusList = append(statusList, &status)
+	}
+	return statusList, nil
+}
+
 // SubscribeOrCancelUsersStatus Subscribe online or cancel online users.
 func (s *userServer) SubscribeOrCancelUsersStatus(ctx context.Context, req *pbuser.SubscribeOrCancelUsersStatusReq) (resp *pbuser.SubscribeOrCancelUsersStatusResp, err error) {
 	if !(req.Genre == constant.SubscriberUser || req.Genre == constant.Unsubscribe) {
@@ -21,7 +42,7 @@ func (s *userServer) SubscribeOrCancelUsersStatus(ctx context.Context, req *pbus
 			return nil, err
 		}
 		var status []*pbuser.OnlineStatus
-		status, err = s.UserDatabase.GetUserStatus(ctx, req.UserIDs)
+		status, err = s.getUserStatus(ctx, req.UserIDs)
 		if err != nil {
 			return nil, err
 		}
@@ -41,11 +62,11 @@ func (s *userServer) GetSubscribeUsersStatus(ctx context.Context, req *pbuser.Ge
 	if err != nil {
 		return nil, err
 	}
-	onlineStatusList, err := s.UserDatabase.GetUserStatus(ctx, userList)
+	statusList, err := s.getUserStatus(ctx, userList)
 	if err != nil {
 		return nil, err
 	}
-	return &pbuser.GetSubscribeUsersStatusResp{StatusList: onlineStatusList}, nil
+	return &pbuser.GetSubscribeUsersStatusResp{StatusList: statusList}, nil
 }
 
 func (s *userServer) UserStatusChangeNotification(ctx context.Context, userID string, status int32, platformID int32) {
@@ -102,9 +123,9 @@ func (s *userServer) SetUserStatus(ctx context.Context, req *pbuser.SetUserStatu
 
 // GetUserStatus Get the online status of the user.
 func (s *userServer) GetUserStatus(ctx context.Context, req *pbuser.GetUserStatusReq) (resp *pbuser.GetUserStatusResp, err error) {
-	onlineStatusList, err := s.UserDatabase.GetUserStatus(ctx, req.UserIDs)
+	statusList, err := s.getUserStatus(ctx, req.UserIDs)
 	if err != nil {
 		return nil, err
 	}
-	return &pbuser.GetUserStatusResp{StatusList: onlineStatusList}, nil
+	return &pbuser.GetUserStatusResp{StatusList: statusList}, nil
 }

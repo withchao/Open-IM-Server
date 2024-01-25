@@ -75,7 +75,9 @@ type UserDatabase interface {
 	// GetSubscribedList Get all subscribed lists
 	GetSubscribedList(ctx context.Context, userID string) ([]string, error)
 	// GetUserStatus Get the online status of the user
-	GetUserStatus(ctx context.Context, userIDs []string) ([]*user.OnlineStatus, error)
+	//GetUserStatus(ctx context.Context, userIDs []string) ([]*user.OnlineStatus, error)
+
+	GetUserOnline(ctx context.Context, userID string) ([]int32, error)
 
 	SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error)
 	SetUserOffline(ctx context.Context, userID string, connID string) (bool, error)
@@ -264,9 +266,13 @@ func (u *userDatabase) GetSubscribedList(ctx context.Context, userID string) ([]
 }
 
 // GetUserStatus get user status.
-func (u *userDatabase) GetUserStatus(ctx context.Context, userIDs []string) ([]*user.OnlineStatus, error) {
-	onlineStatusList, err := u.cache.GetUserStatus(ctx, userIDs)
-	return onlineStatusList, err
+//func (u *userDatabase) GetUserStatus(ctx context.Context, userIDs []string) ([]*user.OnlineStatus, error) {
+//	onlineStatusList, err := u.cache.GetUserStatus(ctx, userIDs)
+//	return onlineStatusList, err
+//}
+
+func (u *userDatabase) GetUserOnline(ctx context.Context, userID string) ([]int32, error) {
+	return u.userStatusDB.GetUserOnline(ctx, userID)
 }
 
 func (u *userDatabase) SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error) {

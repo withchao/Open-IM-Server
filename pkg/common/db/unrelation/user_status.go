@@ -6,6 +6,7 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/cachekey"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/unrelation"
 	"github.com/redis/go-redis/v9"
+	"strconv"
 	"time"
 )
 
@@ -133,4 +134,18 @@ return value
 		return false, err
 	}
 	return val == 0, nil
+}
+
+func (u *UserStatus) GetUserOnline(ctx context.Context, userID string) ([]int32, error) {
+	res, err := u.rdb.HKeys(ctx, u.GetUserStatePlatformKey(userID)).Result()
+	if err != nil {
+		return nil, err
+	}
+	platformIDs := make([]int32, 0, len(res))
+	for _, s := range res {
+		if v, err := strconv.Atoi(s); err == nil {
+			platformIDs = append(platformIDs, int32(v))
+		}
+	}
+	return platformIDs, nil
 }
