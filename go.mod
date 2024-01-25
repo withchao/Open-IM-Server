@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	firebase.google.com/go v3.13.0+incompatible
-	github.com/OpenIMSDK/protocol v0.0.49
+	github.com/OpenIMSDK/protocol v0.0.52
 	github.com/OpenIMSDK/tools v0.0.27
 	github.com/bwmarrin/snowflake v0.3.0 // indirect
 	github.com/dtm-labs/rockscache v0.1.1
@@ -160,5 +160,3 @@ require (
 )
 
 replace github.com/openimsdk/localcache => ./pkg/localcache
-
-replace github.com/OpenIMSDK/protocol => C:\Users\openIM\Desktop\fork\protocol
