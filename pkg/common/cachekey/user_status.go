@@ -1,10 +1,9 @@
 package cachekey
 
 const (
-	SubscriptionKey      = "SUBSCRIPTION:"
-	SubscribedKey        = "SUBSCRIBED:"
-	UserStateConnKey     = "USER_STATE_CONN:"
-	UserStatePlatformKey = "USER_STATE_PLATFORM:"
+	SubscriptionKey  = "SUBSCRIPTION:"
+	SubscribedKey    = "SUBSCRIBED:"
+	UserStateConnKey = "USER_STATE_CONN:"
 )
 
 func GetSubscriptionKey(userID string) string {
@@ -17,8 +16,4 @@ func GetSubscribedKey(userID string) string {
 
 func GetUserStateConnKey(userID string) string {
 	return UserStateConnKey + userID
-}
-
-func GetUserStatePlatformKey(userID string) string {
-	return UserStatePlatformKey + userID
 }

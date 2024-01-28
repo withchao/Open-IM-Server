@@ -5,6 +5,7 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/redis/go-redis/v9"
 	"testing"
+	"time"
 )
 
 func TestName(t *testing.T) {
@@ -12,11 +13,14 @@ func TestName(t *testing.T) {
 	config.Config.Redis.Password = "openIM123"
 
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     "vm.czor.top:16379",
+		Addr:     "172.16.8.38:16379",
 		Password: "openIM123",
 		DB:       5,
 	})
-	u := &UserStatus{rdb: rdb}
+	u := &UserStatus{
+		rdb:              rdb,
+		onlineExpiration: time.Second * 99999999,
+	}
 	//err := u.AddSubscriptionList(context.Background(), "111111", []string{"222222", "333333"})
 	//t.Log(err)
 	//
@@ -26,7 +30,19 @@ func TestName(t *testing.T) {
 	//t.Log(u.GetAllSubscribeList(context.Background(), "111111"))
 	//t.Log(u.GetAllSubscribeList(context.Background(), "222222"))
 
-	first, err := u.SetUserOnline(context.Background(), "111111", "123457", 2)
-	t.Log(first, err)
+	t.Log(u.SetUserOnline(context.Background(), "111111", "c123451", 9))
+	t.Log(u.SetUserOnline(context.Background(), "111111", "c123452", 8))
+	t.Log(u.SetUserOnline(context.Background(), "111111", "c123453", 9))
 
+	t.Log(u.GetUserOnline(context.Background(), "111111"))
+
+	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123451"))
+	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123452"))
+	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123453"))
+
+	//arr, err := u.rdb.HVals(context.Background(), "aaaaaaa").Result()
+	//if err != nil {
+	//	panic(err)
+	//}
+	//t.Log(arr)
 }

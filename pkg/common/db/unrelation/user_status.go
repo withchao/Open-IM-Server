@@ -3,6 +3,7 @@ package unrelation
 import (
 	"context"
 	"github.com/OpenIMSDK/tools/errs"
+	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/cachekey"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/unrelation"
 	"github.com/redis/go-redis/v9"
@@ -44,10 +45,6 @@ func (u *UserStatus) GetUserStateConnKey(userID string) string {
 	return cachekey.GetUserStateConnKey(userID)
 }
 
-func (u *UserStatus) GetUserStatePlatformKey(userID string) string {
-	return cachekey.GetUserStatePlatformKey(userID)
-}
-
 func (u *UserStatus) AddSubscriptionList(ctx context.Context, userID string, userIDList []string) error {
 	script := `
 local userIDs = {}
@@ -85,57 +82,71 @@ func (u *UserStatus) GetSubscribedList(ctx context.Context, userID string) (user
 
 func (u *UserStatus) SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error) {
 	script := `
-local exist = redis.call("HSETNX", KEYS[1], ARGV[1], ARGV[2])
-redis.call("EXPIRE", KEYS[1], ARGV[3])
+local target = tostring(ARGV[1])
+
+local exist = redis.call("HSETNX", KEYS[1], KEYS[2], target)
+redis.call("EXPIRE", KEYS[1], ARGV[2])
 if exist == 0 then
 	return 0
 end
-local value = redis.call("HINCRBY", KEYS[2], ARGV[2], 1)
-redis.call("EXPIRE", KEYS[2], ARGV[3])
-return value
+
+local count = 0
+for _, value in ipairs(redis.call("HVALS", KEYS[1])) do
+    if value == target then
+        count = count + 1
+    end
+end
+return count
 `
-	keys := []string{u.GetUserStateConnKey(userID), u.GetUserStatePlatformKey(userID)}
-	argv := []any{connID, platformID, u.onlineExpiration.Seconds()}
+	keys := []string{u.GetUserStateConnKey(userID), connID}
+	argv := []any{platformID, u.onlineExpiration.Seconds()}
 	val, err := u.rdb.Eval(ctx, script, keys, argv...).Int64()
 	if err != nil {
-		return false, err
+		return false, errs.Wrap(err)
 	}
 	return val == 1, nil
 }
 
 func (u *UserStatus) SetUserOffline(ctx context.Context, userID string, connID string) (bool, error) {
 	script := `
-local platformID = redis.call("HGET", KEYS[1], ARGV[1])
+local platformID = redis.call("HGET", KEYS[1], KEYS[2])
 if platformID == false or platformID == nil then
 	return -1
 end
-redis.call("HDEL", KEYS[1], ARGV[1])
-local value = redis.call("HINCRBY", KEYS[2], platformID, -1)
-if value <= 0 then
-	redis.call("HDEL", KEYS[2], platformID)
-	return 0
+redis.call("HDEL", KEYS[1], KEYS[2])
+
+local count = 0
+for _, value in ipairs(redis.call("HVALS", KEYS[1])) do
+    if value == platformID then
+        count = count + 1
+    end
 end
-return value
+return count
 `
-	keys := []string{u.GetUserStateConnKey(userID), u.GetUserStatePlatformKey(userID)}
-	argv := []any{connID, "platformID", time.Hour.Seconds()}
-	val, err := u.rdb.Eval(ctx, script, keys, argv...).Int64()
+	keys := []string{u.GetUserStateConnKey(userID), connID}
+	val, err := u.rdb.Eval(ctx, script, keys).Int64()
 	if err != nil {
-		return false, err
+		return false, errs.Wrap(err)
 	}
 	return val == 0, nil
 }
 
 func (u *UserStatus) GetUserOnline(ctx context.Context, userID string) ([]int32, error) {
-	res, err := u.rdb.HKeys(ctx, u.GetUserStatePlatformKey(userID)).Result()
+	vals, err := u.rdb.HVals(ctx, u.GetUserStateConnKey(userID)).Result()
 	if err != nil {
-		return nil, err
+		return nil, errs.Wrap(err)
 	}
-	platformIDs := make([]int32, 0, len(res))
-	for _, s := range res {
-		if v, err := strconv.Atoi(s); err == nil {
+	tmp := make(map[string]struct{})
+	platformIDs := make([]int32, 0, len(vals))
+	for _, val := range vals {
+		if _, ok := tmp[val]; ok {
+			continue
+		}
+		tmp[val] = struct{}{}
+		if v, err := strconv.Atoi(val); err == nil {
 			platformIDs = append(platformIDs, int32(v))
 		}
 	}
+	utils.Sort(platformIDs, true)
 	return platformIDs, nil
 }
