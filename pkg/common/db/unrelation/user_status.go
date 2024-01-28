@@ -106,16 +106,6 @@ return value
 func (u *UserStatus) SetUserOffline(ctx context.Context, userID string, connID string) (bool, error) {
 	script := `
 local platformID = redis.call("HGET", KEYS[1], ARGV[1])
-redis.call("EXPIRE", KEYS[1], ARGV[3])
-if exist == 0 then
-	return 0
-end
-local value = redis.call("HINCRBY", KEYS[2], ARGV[2], 1)
-redis.call("EXPIRE", KEYS[2], ARGV[3])
-return value
-`
-	script = `
-local platformID = redis.call("HGET", KEYS[1], ARGV[1])
 if platformID == false or platformID == nil then
 	return -1
 end
