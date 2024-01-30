@@ -31,10 +31,10 @@ func TestName(t *testing.T) {
 	//t.Log(u.GetAllSubscribeList(context.Background(), "222222"))
 
 	t.Log(u.SetUserOnline(context.Background(), "111111", "c123451", 9))
-	t.Log(u.SetUserOnline(context.Background(), "111111", "c123452", 8))
-	t.Log(u.SetUserOnline(context.Background(), "111111", "c123453", 9))
-
-	t.Log(u.GetUserOnline(context.Background(), "111111"))
+	//t.Log(u.SetUserOnline(context.Background(), "111111", "c123452", 8))
+	//t.Log(u.SetUserOnline(context.Background(), "111111", "c123453", 9))
+	//
+	//t.Log(u.GetUserOnline(context.Background(), "111111"))
 
 	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123451"))
 	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123452"))

@@ -3,7 +3,9 @@ package unrelation
 import (
 	"context"
 	"github.com/OpenIMSDK/tools/errs"
+	"github.com/OpenIMSDK/tools/pagination"
 	"github.com/OpenIMSDK/tools/utils"
+	"github.com/dtm-labs/rockscache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/cachekey"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/unrelation"
 	"github.com/redis/go-redis/v9"
@@ -21,8 +23,10 @@ func NewUserStatus(rdb redis.UniversalClient) unrelation.UserModelInterface {
 
 type UserStatus struct {
 	rdb                    redis.UniversalClient
+	rocks                  *rockscache.Client
 	subscriptionExpiration time.Duration
 	onlineExpiration       time.Duration
+	groupExpiration        time.Duration
 }
 
 func str2any(userIDs []string) []any {
@@ -43,6 +47,14 @@ func (u *UserStatus) subscribedKey(userID string) string {
 
 func (u *UserStatus) GetUserStateConnKey(userID string) string {
 	return cachekey.GetUserStateConnKey(userID)
+}
+
+func (u *UserStatus) GetGroupStateKey(groupID string) string {
+	return cachekey.GetGroupStateKey(groupID)
+}
+
+func (u *UserStatus) GetGroupStateTagKey(groupID string) string {
+	return cachekey.GetGroupStateTagKey(groupID)
 }
 
 func (u *UserStatus) AddSubscriptionList(ctx context.Context, userID string, userIDList []string) error {
@@ -149,4 +161,99 @@ func (u *UserStatus) GetUserOnline(ctx context.Context, userID string) ([]int32,
 	}
 	utils.Sort(platformIDs, true)
 	return platformIDs, nil
+}
+
+func (u *UserStatus) SetGroupInfo(ctx context.Context, userID string, online bool, groupIDs []string) error {
+	if len(groupIDs) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(groupIDs))
+	for _, groupID := range groupIDs {
+		keys = append(keys, u.GetGroupStateKey(groupID))
+	}
+	if online {
+		return u.setGroupOnline(ctx, userID, keys)
+	} else {
+		return u.setGroupOffline(ctx, userID, keys)
+	}
+}
+
+func (u *UserStatus) setGroupOnline(ctx context.Context, userID string, keys []string) error {
+	script := `
+for i = 1, #KEYS do
+    redis.call("ZADD", KEYS[i], ARGV[2], ARGV[1])
+end
+return 1
+`
+	argv := []any{userID, u.getScore()}
+	return errs.Wrap(u.rdb.Eval(ctx, script, keys, argv...).Err())
+}
+
+func (u *UserStatus) setGroupOffline(ctx context.Context, userID string, keys []string) error {
+	script := `
+for i = 1, #KEYS do
+    redis.call("ZREM", KEYS[i], ARGV[1])
+end
+return 1
+`
+	argv := []any{userID}
+	return errs.Wrap(u.rdb.Eval(ctx, script, keys, argv...).Err())
+}
+
+func (u *UserStatus) getScore() int64 {
+	return time.Now().Unix()
+}
+
+func (u *UserStatus) GetGroupOnline(ctx context.Context, groupID string, pagination pagination.Pagination, getGroupMemberID func(ctx context.Context, groupID string) ([]string, error)) (int, []string, error) {
+	_, err := u.rocks.Fetch(u.GetGroupStateTagKey(groupID), u.groupExpiration, func() (string, error) {
+		userIDs, err := getGroupMemberID(ctx, groupID)
+		if err != nil {
+			return "", err
+		}
+		score := u.getScore()
+		argv := make([]any, 0, len(userIDs)/2)
+		argv = append(argv, u.groupExpiration.Seconds(), score)
+		for _, userID := range userIDs {
+			platformIDs, err := u.GetUserOnline(ctx, userID)
+			if err != nil {
+				return "", err
+			}
+			if len(platformIDs) > 0 {
+				argv = append(argv, userID)
+			}
+		}
+		if err := u.initGroupOnline(ctx, u.GetGroupStateKey(groupID), argv); err != nil {
+			return "", err
+		}
+		return strconv.FormatInt(score, 10), nil
+	})
+	if err != nil {
+		return 0, nil, err
+	}
+	start := pagination.GetPageNumber() * pagination.GetShowNumber()
+	end := start + pagination.GetShowNumber()
+	key := u.GetGroupStateKey(groupID)
+	userIDs, err := u.rdb.ZRange(ctx, key, int64(start), int64(end)).Result()
+	if err != nil {
+		return 0, nil, err
+	}
+	total, err := u.rdb.ZCard(ctx, key).Result()
+	if err != nil {
+		return 0, nil, err
+	}
+	return int(total), userIDs, nil
+}
+
+func (u *UserStatus) initGroupOnline(ctx context.Context, key string, argv []any) error {
+	script := `
+redis.call("DEL", KEYS[1])
+redis.call("ZADD", KEYS[1], 0, KEYS[2])
+redis.call("EXPIRE", KEYS[1], ARGV[1])
+for i = 3, #ARGV do
+    redis.call("ZADD", KEYS[1], ARGV[2], ARGV[i])
+end
+return 1
+`
+	keys := []string{key, "$placeholder$"}
+	return errs.Wrap(u.rdb.Eval(ctx, script, keys, argv...).Err())
 }
