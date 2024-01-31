@@ -211,3 +211,11 @@ func (g *GroupRpcClient) NotificationUserInfoUpdate(ctx context.Context, userID 
 	})
 	return err
 }
+
+func (g *GroupRpcClient) GetJoinedGroupIDs(ctx context.Context, userID string) ([]string, error) {
+	resp, err := g.Client.GetJoinedGroupIDs(ctx, &group.GetJoinedGroupIDsReq{UserID: userID})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GroupIDs, nil
+}

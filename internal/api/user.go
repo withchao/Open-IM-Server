@@ -121,6 +121,10 @@ func (u *UserApi) GetUsersOnlineStatus(c *gin.Context) {
 	apiresp.GinSuccess(c, respResult)
 }
 
+func (u *UserApi) GetGroupOnlineUser(c *gin.Context) {
+	a2r.Call(user.UserClient.GetGroupOnlineUser, u.Client, c)
+}
+
 func (u *UserApi) UserRegisterCount(c *gin.Context) {
 	a2r.Call(user.UserClient.UserRegisterCount, u.Client, c)
 }

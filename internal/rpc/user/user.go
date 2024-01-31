@@ -17,6 +17,7 @@ package user
 import (
 	"context"
 	"errors"
+	"github.com/openimsdk/open-im-server/v3/pkg/rpccache"
 	"math/rand"
 	"strings"
 	"time"
@@ -58,6 +59,7 @@ type userServer struct {
 	userNotificationSender   *notification.UserNotificationSender
 	friendRpcClient          *rpcclient.FriendRpcClient
 	groupRpcClient           *rpcclient.GroupRpcClient
+	groupLocalCache          *rpccache.GroupLocalCache
 	RegisterCenter           registry.SvcDiscoveryRegistry
 }
 
@@ -83,21 +85,28 @@ func Start(client registry.SvcDiscoveryRegistry, server *grpc.Server) error {
 	for k, v := range config.Config.IMAdmin.UserID {
 		users = append(users, &tablerelation.UserModel{UserID: v, Nickname: config.Config.IMAdmin.Nickname[k], AppMangerLevel: constant.AppNotificationAdmin})
 	}
+
 	userDB, err := mgo.NewUserMongo(mongo.GetDatabase())
 	if err != nil {
 		return err
 	}
 	cache := cache.NewUserCacheRedis(rdb, userDB, cache.GetDefaultOpt())
-	userMongoDB := unrelation.NewUserStatus(rdb)
-	database := controller.NewUserDatabase(userDB, cache, tx.NewMongo(mongo.GetClient()), userMongoDB)
+
 	friendRpcClient := rpcclient.NewFriendRpcClient(client)
 	groupRpcClient := rpcclient.NewGroupRpcClient(client)
+
+	groupLocalCache := rpccache.NewGroupLocalCache(groupRpcClient, rdb)
+
+	userMongoDB := unrelation.NewUserStatus(rdb, groupLocalCache.GetGroupMemberIDs)
+	database := controller.NewUserDatabase(userDB, cache, tx.NewMongo(mongo.GetClient()), userMongoDB)
+
 	msgRpcClient := rpcclient.NewMessageRpcClient(client)
 	u := &userServer{
 		UserDatabase:             database,
 		RegisterCenter:           client,
 		friendRpcClient:          &friendRpcClient,
 		groupRpcClient:           &groupRpcClient,
+		groupLocalCache:          groupLocalCache,
 		friendNotificationSender: notification.NewFriendNotificationSender(&msgRpcClient, notification.WithDBFunc(database.FindWithError)),
 		userNotificationSender:   notification.NewUserNotificationSender(&msgRpcClient, notification.WithUserFunc(database.FindWithError)),
 	}

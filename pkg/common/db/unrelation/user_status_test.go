@@ -2,10 +2,11 @@ package unrelation
 
 import (
 	"context"
+	"github.com/OpenIMSDK/protocol/sdkws"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/redis/go-redis/v9"
+	"strconv"
 	"testing"
-	"time"
 )
 
 func TestName(t *testing.T) {
@@ -17,32 +18,56 @@ func TestName(t *testing.T) {
 		Password: "openIM123",
 		DB:       5,
 	})
-	u := &UserStatus{
-		rdb:              rdb,
-		onlineExpiration: time.Second * 99999999,
+
+	u := NewUserStatus(rdb).(*UserStatus)
+
+	var userIDs []string
+	for i := 0; i < 100; i++ {
+		userIDs = append(userIDs, strconv.Itoa(10000+i))
 	}
-	//err := u.AddSubscriptionList(context.Background(), "111111", []string{"222222", "333333"})
-	//t.Log(err)
-	//
-	//t.Log(u.GetSubscribedList(context.Background(), "111111"))
-	//t.Log(u.GetSubscribedList(context.Background(), "222222"))
-	//
-	//t.Log(u.GetAllSubscribeList(context.Background(), "111111"))
-	//t.Log(u.GetAllSubscribeList(context.Background(), "222222"))
 
-	t.Log(u.SetUserOnline(context.Background(), "111111", "c123451", 9))
-	//t.Log(u.SetUserOnline(context.Background(), "111111", "c123452", 8))
-	//t.Log(u.SetUserOnline(context.Background(), "111111", "c123453", 9))
+	getGroupMemberIDs := func(ctx context.Context, groupID string) ([]string, error) {
+		return userIDs, nil
+	}
+
+	u.getGroupMemberID = getGroupMemberIDs
+
+	var groupID = "333333"
 	//
-	//t.Log(u.GetUserOnline(context.Background(), "111111"))
-
-	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123451"))
-	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123452"))
-	//t.Log(u.SetUserOffline(context.Background(), "111111", "c123453"))
-
-	//arr, err := u.rdb.HVals(context.Background(), "aaaaaaa").Result()
-	//if err != nil {
+	//if err := u.setGroupOnline(context.Background(), "10000", []string{groupID}); err != nil {
 	//	panic(err)
 	//}
-	//t.Log(arr)
+	//return
+
+	for _, userID := range userIDs {
+		_, err := u.SetUserOnline(context.Background(), userID, "cid:"+userID, 9)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	pagination := &sdkws.RequestPagination{PageNumber: 1, ShowNumber: 200}
+
+	//userIDs = nil
+
+	for _, userID := range userIDs {
+		if err := u.SetGroupInfo(context.Background(), userID, true, []string{groupID}); err != nil {
+			panic(err)
+		}
+	}
+
+	total, userIDs, err := u.GetGroupOnline(context.Background(), groupID, !false, pagination)
+	if err != nil {
+		panic(err)
+	}
+	t.Log(total)
+	t.Log(userIDs)
+
+}
+
+func TestName111(t *testing.T) {
+	arr := []int{1, 2, 3, 4, 5, 6, 7, 8, 9}
+	reverse(arr)
+	t.Log(arr)
+
 }

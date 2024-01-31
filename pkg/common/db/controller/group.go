@@ -52,6 +52,7 @@ type GroupDatabase interface {
 	PageGroupRequest(ctx context.Context, groupIDs []string, pagination pagination.Pagination) (int64, []*relationtb.GroupRequestModel, error)
 	GetGroupRoleLevelMemberIDs(ctx context.Context, groupID string, roleLevel int32) ([]string, error)
 
+	GetJoinedGroupIDs(ctx context.Context, userID string) ([]string, error)
 	PageGetJoinGroup(ctx context.Context, userID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error)
 	PageGetGroupMember(ctx context.Context, groupID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error)
 	SearchGroupMember(ctx context.Context, keyword string, groupID string, pagination pagination.Pagination) (int64, []*relationtb.GroupMemberModel, error)
@@ -248,6 +249,10 @@ func (g *groupDatabase) PageGetJoinGroup(ctx context.Context, userID string, pag
 		totalGroupMembers = append(totalGroupMembers, groupMembers...)
 	}
 	return int64(len(groupIDs)), totalGroupMembers, nil
+}
+
+func (g *groupDatabase) GetJoinedGroupIDs(ctx context.Context, userID string) ([]string, error) {
+	return g.cache.GetJoinedGroupIDs(ctx, userID)
 }
 
 func (g *groupDatabase) PageGetGroupMember(ctx context.Context, groupID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error) {

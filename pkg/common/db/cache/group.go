@@ -380,7 +380,7 @@ func (g *GroupCacheRedis) GetGroupMemberNum(ctx context.Context, groupID string)
 func (g *GroupCacheRedis) DelGroupsMemberNum(groupID ...string) GroupCache {
 	keys := make([]string, 0, len(groupID))
 	for _, groupID := range groupID {
-		keys = append(keys, g.getGroupMemberNumKey(groupID))
+		keys = append(keys, g.getGroupMemberNumKey(groupID), cachekey.GetGroupStateTagKey(groupID)) // 删除在线状态
 	}
 	cache := g.NewCache()
 	cache.AddKeys(keys...)

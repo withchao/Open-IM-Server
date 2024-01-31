@@ -138,6 +138,7 @@ func NewGinRouter(discov discoveryregistry.SvcDiscoveryRegistry, rdb redis.Unive
 		groupRouterGroup.POST("/get_group_abstract_info", g.GetGroupAbstractInfo)
 		groupRouterGroup.POST("/get_groups", g.GetGroups)
 		groupRouterGroup.POST("/get_group_member_user_id", g.GetGroupMemberUserIDs)
+		groupRouterGroup.POST("/online_user", u.GetGroupOnlineUser)
 	}
 	superGroupRouterGroup := r.Group("/super_group", ParseToken)
 	{

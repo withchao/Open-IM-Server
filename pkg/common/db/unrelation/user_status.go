@@ -13,11 +13,15 @@ import (
 	"time"
 )
 
-func NewUserStatus(rdb redis.UniversalClient) unrelation.UserModelInterface {
+const redisPlaceholder = "$placeholder$"
+
+func NewUserStatus(rdb redis.UniversalClient, getGroupMemberID func(ctx context.Context, groupID string) ([]string, error)) unrelation.UserModelInterface {
 	return &UserStatus{
 		rdb:                    rdb,
+		rocks:                  rockscache.NewClient(rdb, rockscache.NewDefaultOptions()),
 		subscriptionExpiration: time.Hour * 1,
 		onlineExpiration:       time.Hour * 24,
+		groupExpiration:        time.Hour * 1,
 	}
 }
 
@@ -27,6 +31,7 @@ type UserStatus struct {
 	subscriptionExpiration time.Duration
 	onlineExpiration       time.Duration
 	groupExpiration        time.Duration
+	getGroupMemberID       func(ctx context.Context, groupID string) ([]string, error)
 }
 
 func str2any(userIDs []string) []any {
@@ -163,7 +168,7 @@ func (u *UserStatus) GetUserOnline(ctx context.Context, userID string) ([]int32,
 	return platformIDs, nil
 }
 
-func (u *UserStatus) SetGroupInfo(ctx context.Context, userID string, online bool, groupIDs []string) error {
+func (u *UserStatus) SetGroupOnline(ctx context.Context, userID string, online bool, groupIDs []string) error {
 	if len(groupIDs) == 0 {
 		return nil
 	}
@@ -204,9 +209,48 @@ func (u *UserStatus) getScore() int64 {
 	return time.Now().Unix()
 }
 
-func (u *UserStatus) GetGroupOnline(ctx context.Context, groupID string, pagination pagination.Pagination, getGroupMemberID func(ctx context.Context, groupID string) ([]string, error)) (int, []string, error) {
+func (u *UserStatus) GetGroupOnline(ctx context.Context, groupID string, desc bool, pagination pagination.Pagination) (int64, []string, error) {
+	if err := u.initGroupOnline(ctx, groupID); err != nil {
+		return 0, nil, err
+	}
+	key := u.GetGroupStateKey(groupID)
+	total, err := u.rdb.ZCard(ctx, key).Result()
+	if err != nil {
+		return 0, nil, err
+	}
+	if total > 0 {
+		total--
+	}
+	var start, end int64
+	if desc {
+		start = -int64(pagination.GetPageNumber()) * int64(pagination.GetShowNumber())
+		end = start + int64(pagination.GetShowNumber()) - 1
+	} else {
+		start = int64((pagination.GetPageNumber()-1)*pagination.GetShowNumber()) + 1
+		end = start + int64(pagination.GetShowNumber())
+	}
+	userIDs, err := u.rdb.ZRange(ctx, key, start, end).Result()
+	if err != nil {
+		return 0, nil, err
+	}
+	if desc && len(userIDs) > 0 {
+		if userIDs[0] == redisPlaceholder {
+			userIDs = userIDs[1:]
+		}
+		reverse(userIDs)
+	}
+	return total, userIDs, nil
+}
+
+func reverse[T any](list []T) {
+	for i, j := 0, len(list)-1; i < j; i, j = i+1, j-1 {
+		list[i], list[j] = list[j], list[i]
+	}
+}
+
+func (u *UserStatus) initGroupOnline(ctx context.Context, groupID string) error {
 	_, err := u.rocks.Fetch(u.GetGroupStateTagKey(groupID), u.groupExpiration, func() (string, error) {
-		userIDs, err := getGroupMemberID(ctx, groupID)
+		userIDs, err := u.getGroupMemberID(ctx, groupID)
 		if err != nil {
 			return "", err
 		}
@@ -222,29 +266,15 @@ func (u *UserStatus) GetGroupOnline(ctx context.Context, groupID string, paginat
 				argv = append(argv, userID)
 			}
 		}
-		if err := u.initGroupOnline(ctx, u.GetGroupStateKey(groupID), argv); err != nil {
+		if err := u.initGroupOnlineRedis(ctx, u.GetGroupStateKey(groupID), argv); err != nil {
 			return "", err
 		}
-		return strconv.FormatInt(score, 10), nil
+		return strconv.Itoa(int(score)), nil
 	})
-	if err != nil {
-		return 0, nil, err
-	}
-	start := pagination.GetPageNumber() * pagination.GetShowNumber()
-	end := start + pagination.GetShowNumber()
-	key := u.GetGroupStateKey(groupID)
-	userIDs, err := u.rdb.ZRange(ctx, key, int64(start), int64(end)).Result()
-	if err != nil {
-		return 0, nil, err
-	}
-	total, err := u.rdb.ZCard(ctx, key).Result()
-	if err != nil {
-		return 0, nil, err
-	}
-	return int(total), userIDs, nil
+	return err
 }
 
-func (u *UserStatus) initGroupOnline(ctx context.Context, key string, argv []any) error {
+func (u *UserStatus) initGroupOnlineRedis(ctx context.Context, key string, argv []any) error {
 	script := `
 redis.call("DEL", KEYS[1])
 redis.call("ZADD", KEYS[1], 0, KEYS[2])
@@ -254,6 +284,6 @@ for i = 3, #ARGV do
 end
 return 1
 `
-	keys := []string{key, "$placeholder$"}
+	keys := []string{key, redisPlaceholder}
 	return errs.Wrap(u.rdb.Eval(ctx, script, keys, argv...).Err())
 }

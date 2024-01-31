@@ -85,14 +85,7 @@ func InitMsgTool() (*MsgTool, error) {
 		return nil, err
 	}
 	msgDatabase := controller.InitCommonMsgDatabase(rdb, mongo.GetDatabase())
-	userMongoDB := unrelation.NewUserStatus(rdb)
 	ctxTx := tx.NewMongo(mongo.GetClient())
-	userDatabase := controller.NewUserDatabase(
-		userDB,
-		cache.NewUserCacheRedis(rdb, userDB, cache.GetDefaultOpt()),
-		ctxTx,
-		userMongoDB,
-	)
 	groupDB, err := mgo.NewGroupMongo(mongo.GetDatabase())
 	if err != nil {
 		return nil, err
@@ -117,6 +110,13 @@ func InitMsgTool() (*MsgTool, error) {
 	)
 	msgRpcClient := rpcclient.NewMessageRpcClient(discov)
 	msgNotificationSender := notification.NewMsgNotificationSender(rpcclient.WithRpcClient(&msgRpcClient))
+	userMongoDB := unrelation.NewUserStatus(rdb, groupDatabase.FindGroupMemberUserID)
+	userDatabase := controller.NewUserDatabase(
+		userDB,
+		cache.NewUserCacheRedis(rdb, userDB, cache.GetDefaultOpt()),
+		ctxTx,
+		userMongoDB,
+	)
 	msgTool := NewMsgTool(msgDatabase, userDatabase, groupDatabase, conversationDatabase, msgNotificationSender)
 	return msgTool, nil
 }

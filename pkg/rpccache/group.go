@@ -141,3 +141,18 @@ func (g *GroupLocalCache) GetGroupMemberInfoMap(ctx context.Context, groupID str
 	}
 	return members, nil
 }
+
+func (g *GroupLocalCache) GetJoinedGroupIDs(ctx context.Context, userID string) (val []string, err error) {
+	log.ZDebug(ctx, "GroupLocalCache GetJoinedGroupIDs req", "userID", userID)
+	defer func() {
+		if err == nil {
+			log.ZDebug(ctx, "GroupLocalCache GetJoinedGroupIDs return", "value", val)
+		} else {
+			log.ZError(ctx, "GroupLocalCache GetJoinedGroupIDs return", err)
+		}
+	}()
+	return localcache.AnyValue[[]string](g.local.Get(ctx, cachekey.GetJoinedGroupsKey(userID), func(ctx context.Context) (any, error) {
+		log.ZDebug(ctx, "GroupLocalCache GetJoinedGroupIDs rpc", "userID", userID)
+		return g.client.GetJoinedGroupIDs(ctx, userID)
+	}))
+}

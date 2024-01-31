@@ -27,7 +27,7 @@ func getPublishKey(topic string, key []string) []string {
 			},
 			{
 				Local: config.Config.LocalCache.Group,
-				Keys:  []string{cachekey.GroupMemberIDsKey, cachekey.GroupInfoKey, cachekey.GroupMemberInfoKey},
+				Keys:  []string{cachekey.GroupMemberIDsKey, cachekey.GroupInfoKey, cachekey.GroupMemberInfoKey, cachekey.JoinedGroupsKey},
 			},
 			{
 				Local: config.Config.LocalCache.Friend,

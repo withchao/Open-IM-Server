@@ -14,7 +14,10 @@
 
 package unrelation
 
-import "context"
+import (
+	"context"
+	"github.com/OpenIMSDK/tools/pagination"
+)
 
 // SubscribeUser collection constant.
 const (
@@ -48,4 +51,8 @@ type UserModelInterface interface {
 	SetUserOffline(ctx context.Context, userID string, connID string) (bool, error)
 
 	GetUserOnline(ctx context.Context, userID string) ([]int32, error)
+
+	SetGroupOnline(ctx context.Context, userID string, online bool, groupIDs []string) error
+
+	GetGroupOnline(ctx context.Context, groupID string, desc bool, pagination pagination.Pagination) (int64, []string, error)
 }

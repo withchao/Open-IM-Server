@@ -104,6 +104,9 @@ func (s *userServer) SetUserStatus(ctx context.Context, req *pbuser.SetUserStatu
 		return nil, err
 	}
 	if first {
+		if err := s.updateGroupCache(ctx, req.UserID); err != nil {
+			log.ZError(ctx, "updateGroupCache err", err, "userID", req.UserID)
+		}
 		s.UserStatusChangeNotification(ctx, req.UserID, req.Status, req.PlatformID)
 		switch req.Status {
 		case constant.Online:
@@ -121,6 +124,22 @@ func (s *userServer) SetUserStatus(ctx context.Context, req *pbuser.SetUserStatu
 	return &pbuser.SetUserStatusResp{}, nil
 }
 
+func (s *userServer) updateGroupCache(ctx context.Context, userID string) error {
+	groupIDs, err := s.groupLocalCache.GetJoinedGroupIDs(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if len(groupIDs) == 0 {
+		return nil
+	}
+	platformIDs, err := s.UserDatabase.GetUserOnline(ctx, userID)
+	if err != nil {
+		return err
+	}
+	online := len(platformIDs) > 0
+	return s.UserDatabase.SetGroupOnline(ctx, userID, online, groupIDs)
+}
+
 // GetUserStatus Get the online status of the user.
 func (s *userServer) GetUserStatus(ctx context.Context, req *pbuser.GetUserStatusReq) (resp *pbuser.GetUserStatusResp, err error) {
 	statusList, err := s.getUserStatus(ctx, req.UserIDs)
@@ -128,4 +147,18 @@ func (s *userServer) GetUserStatus(ctx context.Context, req *pbuser.GetUserStatu
 		return nil, err
 	}
 	return &pbuser.GetUserStatusResp{StatusList: statusList}, nil
+}
+
+func (s *userServer) GetGroupOnlineUser(ctx context.Context, req *pbuser.GetGroupOnlineUserReq) (*pbuser.GetGroupOnlineUserResp, error) {
+	if req.Pagination == nil {
+		return nil, errs.ErrArgs.Wrap("pagination is nil")
+	}
+	total, userIDs, err := s.UserDatabase.GetGroupOnline(ctx, req.GroupID, req.Desc, req.Pagination)
+	if err != nil {
+		return nil, err
+	}
+	return &pbuser.GetGroupOnlineUserResp{
+		Total:   total,
+		UserIDs: userIDs,
+	}, nil
 }

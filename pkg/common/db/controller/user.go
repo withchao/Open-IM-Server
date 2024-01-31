@@ -78,6 +78,8 @@ type UserDatabase interface {
 	//GetUserStatus(ctx context.Context, userIDs []string) ([]*user.OnlineStatus, error)
 
 	GetUserOnline(ctx context.Context, userID string) ([]int32, error)
+	GetGroupOnline(ctx context.Context, groupID string, desc bool, pagination pagination.Pagination) (int64, []string, error)
+	SetGroupOnline(ctx context.Context, userID string, online bool, groupIDs []string) error
 
 	SetUserOnline(ctx context.Context, userID string, connID string, platformID int32) (bool, error)
 	SetUserOffline(ctx context.Context, userID string, connID string) (bool, error)
@@ -281,6 +283,14 @@ func (u *userDatabase) SetUserOnline(ctx context.Context, userID string, connID 
 
 func (u *userDatabase) SetUserOffline(ctx context.Context, userID string, connID string) (bool, error) {
 	return u.userStatusDB.SetUserOffline(ctx, userID, connID)
+}
+
+func (u *userDatabase) GetGroupOnline(ctx context.Context, groupID string, desc bool, pagination pagination.Pagination) (int64, []string, error) {
+	return u.userStatusDB.GetGroupOnline(ctx, groupID, desc, pagination)
+}
+
+func (u *userDatabase) SetGroupOnline(ctx context.Context, userID string, online bool, groupIDs []string) error {
+	return u.userStatusDB.SetGroupOnline(ctx, userID, online, groupIDs)
 }
 
 // SetUserStatus Set the user status and save it in redis.
