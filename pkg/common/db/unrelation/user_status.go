@@ -22,6 +22,7 @@ func NewUserStatus(rdb redis.UniversalClient, getGroupMemberID func(ctx context.
 		subscriptionExpiration: time.Hour * 1,
 		onlineExpiration:       time.Hour * 24,
 		groupExpiration:        time.Hour * 1,
+		getGroupMemberID:       getGroupMemberID,
 	}
 }
 
