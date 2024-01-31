@@ -89,7 +89,7 @@ While the first two methods will be our main focus, it's worth noting that the t
 
 ###  1.2. <a name='SourceCodeDeployment'></a>Source Code Deployment
 
-In the source code deployment method, the configuration generation process involves executing `make init`, which fundamentally runs the script `./scripts/init-config.sh`. This script utilizes variables defined in the [`environment.sh`](https://github.com/openimsdk/open-im-server/blob/main/scripts/install/environment.sh) script to render the [`openim.yaml`](https://github.com/openimsdk/open-im-server/blob/main/deployments/templates/openim.yaml) template file, subsequently generating the [`config.yaml`](https://github.com/openimsdk/open-im-server/blob/main/config/config.yaml) configuration file.
+In the source code deployment method, the configuration generation process involves executing `make init`, which fundamentally runs the script `./scripts/init-config.sh`. This script utilizes variables defined in the [`environment.sh`](https://github.com/openimsdk/open-im-server/blob/main/scripts/install/environment.sh) script to render the [`config.yaml`](https://github.com/openimsdk/open-im-server/blob/main/deployments/templates/config.yaml) template file, subsequently generating the [`config.yaml`](https://github.com/openimsdk/open-im-server/blob/main/config/config.yaml) configuration file.
 
 ###  1.3. <a name='DockerComposeDeployment'></a>Docker Compose Deployment
 
@@ -477,12 +477,6 @@ This section involves setting up additional configuration variables for Websocke
 | JPNS_MASTER_SECRET      | [User Defined]    | JPNS Master Secret               |
 | JPNS_PUSH_URL           | [User Defined]    | JPNS Push Notification URL       |
 | JPNS_PUSH_INTENT        | [User Defined]    | JPNS Push Intent                 |
-| MANAGER_USERID_1        | "openIM123456"    | Administrator ID 1               |
-| MANAGER_USERID_2        | "openIM654321"    | Administrator ID 2               |
-| MANAGER_USERID_3        | "openIMAdmin"     | Administrator ID 3               |
-| NICKNAME_1              | "system1"         | Nickname 1                       |
-| NICKNAME_2              | "system2"         | Nickname 2                       |
-| NICKNAME_3              | "system3"         | Nickname 3                       |
 | IM_ADMIN_USERID         | "imAdmin"         | IM Administrator ID              |
 | IM_ADMIN_NAME           | "imAdmin"         | IM Administrator Nickname        |
 | MULTILOGIN_POLICY       | "1"               | Multi-login Policy               |
