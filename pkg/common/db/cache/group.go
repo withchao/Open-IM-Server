@@ -381,6 +381,7 @@ func (g *GroupCacheRedis) DelGroupsMemberNum(groupID ...string) GroupCache {
 	keys := make([]string, 0, len(groupID))
 	for _, groupID := range groupID {
 		keys = append(keys, g.getGroupMemberNumKey(groupID), cachekey.GetGroupStateTagKey(groupID)) // 删除在线状态
+		log.ZDebug(context.Background(), "delete GetGroupStateTagKey", "groupID", groupID, "key", cachekey.GetGroupStateTagKey(groupID))
 	}
 	cache := g.NewCache()
 	cache.AddKeys(keys...)

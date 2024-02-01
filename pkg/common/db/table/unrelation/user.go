@@ -54,5 +54,7 @@ type UserModelInterface interface {
 
 	SetGroupOnline(ctx context.Context, userID string, online bool, groupIDs []string) error
 
+	GetGroupOnlineNum(ctx context.Context, groupID string) (int64, error)
+	GetGroupOnlineUserIDs(ctx context.Context, groupID string) ([]string, error)
 	GetGroupOnline(ctx context.Context, groupID string, desc bool, pagination pagination.Pagination) (int64, []string, error)
 }

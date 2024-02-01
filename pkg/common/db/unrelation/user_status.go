@@ -210,6 +210,30 @@ func (u *UserStatus) getScore() int64 {
 	return time.Now().Unix()
 }
 
+func (u *UserStatus) GetGroupOnlineNum(ctx context.Context, groupID string) (int64, error) {
+	if err := u.initGroupOnline(ctx, groupID); err != nil {
+		return 0, err
+	}
+	key := u.GetGroupStateKey(groupID)
+	total, err := u.rdb.ZCard(ctx, key).Result()
+	if err != nil {
+		return 0, errs.Wrap(err)
+	}
+	return total, nil
+}
+
+func (u *UserStatus) GetGroupOnlineUserIDs(ctx context.Context, groupID string) ([]string, error) {
+	if err := u.initGroupOnline(ctx, groupID); err != nil {
+		return nil, err
+	}
+	key := u.GetGroupStateKey(groupID)
+	userIDs, err := u.rdb.ZRange(ctx, key, 1, -1).Result()
+	if err != nil {
+		return nil, errs.Wrap(err)
+	}
+	return userIDs, nil
+}
+
 func (u *UserStatus) GetGroupOnline(ctx context.Context, groupID string, desc bool, pagination pagination.Pagination) (int64, []string, error) {
 	if err := u.initGroupOnline(ctx, groupID); err != nil {
 		return 0, nil, err
@@ -217,7 +241,7 @@ func (u *UserStatus) GetGroupOnline(ctx context.Context, groupID string, desc bo
 	key := u.GetGroupStateKey(groupID)
 	total, err := u.rdb.ZCard(ctx, key).Result()
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, errs.Wrap(err)
 	}
 	if total > 0 {
 		total--
