@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/OpenIMSDK/tools/errs"
+	"github.com/OpenIMSDK/tools/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -36,7 +37,8 @@ func (s *SeqMongo) MallocSeq(ctx context.Context, conversationID string, size in
 	if err := result.Decode(&seqResult); err != nil {
 		return 0, errs.Wrap(err, "decode seq result")
 	}
-	return seqResult.Seq + 1, nil
+	log.ZDebug(ctx, "malloc seq call mongo", "conversationID", conversationID, "size", size, "startSeq", seqResult.Seq-size+1, "endSeq", seqResult.Seq)
+	return seqResult.Seq, nil
 }
 
 func (s *SeqMongo) Malloc(ctx context.Context, conversationID string, size int64) ([]int64, error) {
@@ -45,7 +47,7 @@ func (s *SeqMongo) Malloc(ctx context.Context, conversationID string, size int64
 		return nil, err
 	}
 	seqs := make([]int64, 0, size)
-	for i := seq - size; i < seq; i++ {
+	for i := seq - size + 1; i <= seq; i++ {
 		seqs = append(seqs, i)
 	}
 	return seqs, nil
