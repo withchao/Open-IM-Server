@@ -165,7 +165,8 @@ func (s *Server) SuperGroupOnlineBatchPushOneMsg(ctx context.Context, req *msgga
 				(client.IsBackground && client.PlatformID != constant.IOSPlatformID) {
 				err := client.PushMessage(ctx, req.MsgData)
 				if err != nil {
-					userPlatform.ResultCode = int64(errs.ErrPushMsgErr.Code())
+					//userPlatform.ResultCode = int64(errs.ErrPushMsgErr.Code())
+					userPlatform.ResultCode = 1603
 					resp = append(resp, userPlatform)
 				} else {
 					if _, ok := s.pushTerminal[client.PlatformID]; ok {
@@ -174,7 +175,8 @@ func (s *Server) SuperGroupOnlineBatchPushOneMsg(ctx context.Context, req *msgga
 					}
 				}
 			} else {
-				userPlatform.ResultCode = int64(errs.ErrIOSBackgroundPushErr.Code())
+				userPlatform.ResultCode = 1604
+				//userPlatform.ResultCode = int64(errs.ErrIOSBackgroundPushErr.Code())
 				resp = append(resp, userPlatform)
 			}
 		}
