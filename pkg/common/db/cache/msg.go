@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"github.com/dtm-labs/rockscache"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 	"strconv"
 	"time"
 
@@ -40,8 +41,8 @@ import (
 )
 
 const (
-	maxSeq                 = "MAX_SEQ:"
-	minSeq                 = "MIN_SEQ:"
+	//maxSeq                 = "MAX_SEQ:"
+	//minSeq                 = "MIN_SEQ:"
 	conversationUserMinSeq = "CON_USER_MIN_SEQ:"
 	hasReadSeq             = "HAS_READ_SEQ:"
 
@@ -64,7 +65,7 @@ const (
 var concurrentLimit = 3
 
 type SeqCache interface {
-	SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error
+	MallocSeq(ctx context.Context, conversationID string, size int64) ([]int64, error)
 	GetMaxSeqs(ctx context.Context, conversationIDs []string) (map[string]int64, error)
 	GetMaxSeq(ctx context.Context, conversationID string) (int64, error)
 	SetMinSeq(ctx context.Context, conversationID string, minSeq int64) error
@@ -128,23 +129,28 @@ type MsgModel interface {
 	UnLockMessageTypeKey(ctx context.Context, clientMsgID string, TypeKey string) error
 }
 
-func NewMsgCacheModel(client redis.UniversalClient) MsgModel {
+func NewMsgCacheModel(client redis.UniversalClient, mgo relation.SeqModelInterface) MsgModel {
 	rcClient := rockscache.NewClient(client, rockscache.NewDefaultOptions())
-	return &msgCache{metaCache: NewMetaCacheRedis(rcClient), rdb: client}
+	return &msgCache{
+		metaCache: NewMetaCacheRedis(rcClient),
+		rdb:       client,
+		seq:       NewSeqCache(client, mgo),
+	}
 }
 
 type msgCache struct {
 	metaCache
 	rdb redis.UniversalClient
+	seq MallocSeq
 }
 
-func (c *msgCache) getMaxSeqKey(conversationID string) string {
-	return maxSeq + conversationID
-}
-
-func (c *msgCache) getMinSeqKey(conversationID string) string {
-	return minSeq + conversationID
-}
+//func (c *msgCache) getMaxSeqKey(conversationID string) string {
+//	return maxSeq + conversationID
+//}
+//
+//func (c *msgCache) getMinSeqKey(conversationID string) string {
+//	return minSeq + conversationID
+//}
 
 func (c *msgCache) getHasReadSeqKey(conversationID string, userID string) string {
 	return hasReadSeq + userID + ":" + conversationID
@@ -178,20 +184,35 @@ func (c *msgCache) getSeqs(ctx context.Context, items []string, getkey func(s st
 	return m, nil
 }
 
-func (c *msgCache) SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error {
-	return c.setSeq(ctx, conversationID, maxSeq, c.getMaxSeqKey)
+func (c *msgCache) MallocSeq(ctx context.Context, conversationID string, size int64) ([]int64, error) {
+	return c.seq.Malloc(ctx, conversationID, size)
 }
 
-func (c *msgCache) GetMaxSeqs(ctx context.Context, conversationIDs []string) (m map[string]int64, err error) {
-	return c.getSeqs(ctx, conversationIDs, c.getMaxSeqKey)
+//func (c *msgCache) SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error {
+//	return c.setSeq(ctx, conversationID, maxSeq, c.getMaxSeqKey)
+//}
+
+func (c *msgCache) GetMaxSeqs(ctx context.Context, conversationIDs []string) (map[string]int64, error) {
+	m := make(map[string]int64)
+	for _, conversationID := range conversationIDs {
+		if _, ok := m[conversationID]; ok {
+			continue
+		}
+		seq, err := c.GetMaxSeq(ctx, conversationID)
+		if err != nil {
+			return nil, err
+		}
+		m[conversationID] = seq
+	}
+	return m, nil
 }
 
 func (c *msgCache) GetMaxSeq(ctx context.Context, conversationID string) (int64, error) {
-	return c.getSeq(ctx, conversationID, c.getMaxSeqKey)
+	return c.seq.GetMaxSeq(ctx, conversationID)
 }
 
 func (c *msgCache) SetMinSeq(ctx context.Context, conversationID string, minSeq int64) error {
-	return c.setSeq(ctx, conversationID, minSeq, c.getMinSeqKey)
+	return c.seq.SetMinSeq(ctx, conversationID, minSeq)
 }
 
 func (c *msgCache) setSeqs(ctx context.Context, seqs map[string]int64, getkey func(key string) string) error {
@@ -204,35 +225,58 @@ func (c *msgCache) setSeqs(ctx context.Context, seqs map[string]int64, getkey fu
 }
 
 func (c *msgCache) SetMinSeqs(ctx context.Context, seqs map[string]int64) error {
-	return c.setSeqs(ctx, seqs, c.getMinSeqKey)
+	for conversationID, seq := range seqs {
+		if err := c.seq.SetMinSeq(ctx, conversationID, seq); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *msgCache) GetMinSeqs(ctx context.Context, conversationIDs []string) (map[string]int64, error) {
-	return c.getSeqs(ctx, conversationIDs, c.getMinSeqKey)
+	m := make(map[string]int64)
+	for _, conversationID := range conversationIDs {
+		seq, err := c.GetMinSeq(ctx, conversationID)
+		if err != nil {
+			return nil, err
+		}
+		m[conversationID] = seq
+	}
+	return m, nil
 }
 
 func (c *msgCache) GetMinSeq(ctx context.Context, conversationID string) (int64, error) {
-	return c.getSeq(ctx, conversationID, c.getMinSeqKey)
+	return c.seq.GetMinSeq(ctx, conversationID)
 }
 
 func (c *msgCache) GetConversationUserMinSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return utils.Wrap2(c.rdb.Get(ctx, c.getConversationUserMinSeqKey(conversationID, userID)).Int64())
 }
 
-func (c *msgCache) GetConversationUserMinSeqs(ctx context.Context, conversationID string, userIDs []string) (m map[string]int64, err error) {
-	return c.getSeqs(ctx, userIDs, func(userID string) string {
-		return c.getConversationUserMinSeqKey(conversationID, userID)
-	})
+func (c *msgCache) GetConversationUserMinSeqs(ctx context.Context, conversationID string, userIDs []string) (map[string]int64, error) {
+	m := make(map[string]int64)
+	for _, userID := range userIDs {
+		seq, err := c.GetConversationUserMinSeq(ctx, conversationID, userID)
+		if err != nil {
+			return nil, err
+		}
+		m[userID] = seq
+	}
+	return m, nil
+}
+
+func (c *msgCache) SetConversationUserMinSeqs(ctx context.Context, conversationID string, seqs map[string]int64) error {
+	for userID, seq := range seqs {
+		if err := c.SetConversationUserMinSeq(ctx, conversationID, userID, seq); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *msgCache) SetConversationUserMinSeq(ctx context.Context, conversationID string, userID string, minSeq int64) error {
-	return utils.Wrap1(c.rdb.Set(ctx, c.getConversationUserMinSeqKey(conversationID, userID), minSeq, 0).Err())
-}
 
-func (c *msgCache) SetConversationUserMinSeqs(ctx context.Context, conversationID string, seqs map[string]int64) (err error) {
-	return c.setSeqs(ctx, seqs, func(userID string) string {
-		return c.getConversationUserMinSeqKey(conversationID, userID)
-	})
+	return utils.Wrap1(c.rdb.Set(ctx, c.getConversationUserMinSeqKey(conversationID, userID), minSeq, 0).Err())
 }
 
 func (c *msgCache) SetUserConversationsMinSeqs(ctx context.Context, userID string, seqs map[string]int64) (err error) {

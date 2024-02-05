@@ -160,3 +160,8 @@ require (
 )
 
 replace github.com/openimsdk/localcache => ./pkg/localcache
+
+
+replace (
+	github.com/OpenIMSDK/tools => C:\Users\openIM\Desktop\fork\tools
+)

@@ -16,6 +16,8 @@ package auth
 
 import (
 	"context"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 
@@ -49,12 +51,20 @@ func Start(client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err != nil {
 		return err
 	}
+	cli, err := unrelation.NewMongo()
+	if err != nil {
+		return err
+	}
+	seq, err := mgo.NewSeq(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
 	userRpcClient := rpcclient.NewUserRpcClient(client)
 	pbauth.RegisterAuthServer(server, &authServer{
 		userRpcClient:  &userRpcClient,
 		RegisterCenter: client,
 		authDatabase: controller.NewAuthDatabase(
-			cache.NewMsgCacheModel(rdb),
+			cache.NewMsgCacheModel(rdb, seq),
 			config.Config.Secret,
 			config.Config.TokenPolicy.Expire,
 		),

@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
 	"time"
 
 	"github.com/OpenIMSDK/protocol/constant"
@@ -75,7 +76,7 @@ type CommonMsgDatabase interface {
 	// 物理删除消息置空
 	DeleteMsgsPhysicalBySeqs(ctx context.Context, conversationID string, seqs []int64) error
 
-	SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error
+	//SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error
 	GetMaxSeqs(ctx context.Context, conversationIDs []string) (map[string]int64, error)
 	GetMaxSeq(ctx context.Context, conversationID string) (int64, error)
 	SetMinSeq(ctx context.Context, conversationID string, minSeq int64) error
@@ -136,11 +137,14 @@ func NewCommonMsgDatabase(msgDocModel unrelationtb.MsgDocModelInterface, cacheMo
 	}
 }
 
-func InitCommonMsgDatabase(rdb redis.UniversalClient, database *mongo.Database) CommonMsgDatabase {
-	cacheModel := cache.NewMsgCacheModel(rdb)
+func InitCommonMsgDatabase(rdb redis.UniversalClient, database *mongo.Database) (CommonMsgDatabase, error) {
+	seq, err := mgo.NewSeq(database)
+	if err != nil {
+		return nil, err
+	}
+	cacheModel := cache.NewMsgCacheModel(rdb, seq)
 	msgDocModel := unrelation.NewMsgMongoDriver(database)
-	CommonMsgDatabase := NewCommonMsgDatabase(msgDocModel, cacheModel)
-	return CommonMsgDatabase
+	return NewCommonMsgDatabase(msgDocModel, cacheModel), nil
 }
 
 type commonMsgDatabase struct {
@@ -358,11 +362,15 @@ func (db *commonMsgDatabase) DelUserDeleteMsgsList(ctx context.Context, conversa
 }
 
 func (db *commonMsgDatabase) BatchInsertChat2Cache(ctx context.Context, conversationID string, msgs []*sdkws.MsgData) (seq int64, isNew bool, err error) {
-	currentMaxSeq, err := db.cache.GetMaxSeq(ctx, conversationID)
-	if err != nil && errs.Unwrap(err) != redis.Nil {
-		log.ZError(ctx, "db.cache.GetMaxSeq", err)
+	seqs, err := db.cache.MallocSeq(ctx, conversationID, int64(len(msgs)))
+	if err != nil {
 		return 0, false, err
 	}
+	//currentMaxSeq, err := db.cache.GetMaxSeq(ctx, conversationID)
+	//if err != nil && errs.Unwrap(err) != redis.Nil {
+	//	log.ZError(ctx, "db.cache.GetMaxSeq", err)
+	//	return 0, false, err
+	//}
 	lenList := len(msgs)
 	if int64(lenList) > db.msg.GetSingleGocMsgNum() {
 		return 0, false, errors.New("too large")
@@ -370,14 +378,11 @@ func (db *commonMsgDatabase) BatchInsertChat2Cache(ctx context.Context, conversa
 	if lenList < 1 {
 		return 0, false, errors.New("too short as 0")
 	}
-	if errs.Unwrap(err) == redis.Nil {
-		isNew = true
-	}
-	lastMaxSeq := currentMaxSeq
+	isNew = seqs[0] == 1
+	lastMaxSeq := seqs[len(seqs)-1]
 	userSeqMap := make(map[string]int64)
-	for _, m := range msgs {
-		currentMaxSeq++
-		m.Seq = currentMaxSeq
+	for i, m := range msgs {
+		m.Seq = seqs[i]
 		userSeqMap[m.SendID] = m.Seq
 	}
 	failedNum, err := db.cache.SetMessageToCache(ctx, conversationID, msgs)
@@ -386,11 +391,6 @@ func (db *commonMsgDatabase) BatchInsertChat2Cache(ctx context.Context, conversa
 		log.ZError(ctx, "setMessageToCache error", err, "len", len(msgs), "conversationID", conversationID)
 	} else {
 		prommetrics.MsgInsertRedisSuccessCounter.Inc()
-	}
-	err = db.cache.SetMaxSeq(ctx, conversationID, currentMaxSeq)
-	if err != nil {
-		log.ZError(ctx, "db.cache.SetMaxSeq error", err, "conversationID", conversationID)
-		prommetrics.SeqSetFailedCounter.Inc()
 	}
 	err2 := db.cache.SetHasReadSeqs(ctx, conversationID, userSeqMap)
 	if err != nil {
@@ -908,9 +908,9 @@ func (db *commonMsgDatabase) CleanUpUserConversationsMsgs(ctx context.Context, u
 	}
 }
 
-func (db *commonMsgDatabase) SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error {
-	return db.cache.SetMaxSeq(ctx, conversationID, maxSeq)
-}
+//func (db *commonMsgDatabase) SetMaxSeq(ctx context.Context, conversationID string, maxSeq int64) error {
+//	return db.cache.SetMaxSeq(ctx, conversationID, maxSeq)
+//}
 
 func (db *commonMsgDatabase) GetMaxSeqs(ctx context.Context, conversationIDs []string) (map[string]int64, error) {
 	return db.cache.GetMaxSeqs(ctx, conversationIDs)

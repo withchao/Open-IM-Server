@@ -7,6 +7,8 @@ import (
 	"github.com/openimsdk/open-im-server/v3/internal/push/offlinepush"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/controller"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 	"google.golang.org/grpc"
 )
 
@@ -35,7 +37,15 @@ func Start(disCov discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err != nil {
 		return err
 	}
-	cacheModel := cache.NewMsgCacheModel(rdb)
+	cli, err := unrelation.NewMongo()
+	if err != nil {
+		return err
+	}
+	seq, err := mgo.NewSeq(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
+	cacheModel := cache.NewMsgCacheModel(rdb, seq)
 	offlinePusher := offlinepush.NewOfflinePusher(cacheModel)
 	database := controller.NewPushDatabase(cacheModel)
 

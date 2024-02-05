@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/OpenIMSDK/tools/errs"
+	"github.com/OpenIMSDK/tools/log"
 	"github.com/dtm-labs/rockscache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/cachekey"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
@@ -15,38 +16,73 @@ import (
 
 type MallocSeq interface {
 	Malloc(ctx context.Context, conversationID string, size int64) ([]int64, error)
+	GetMaxSeq(ctx context.Context, conversationID string) (int64, error)
+	GetMinSeq(ctx context.Context, conversationID string) (int64, error)
+	SetMinSeq(ctx context.Context, conversationID string, seq int64) error
 }
 
 func NewSeqCache(rdb redis.UniversalClient, mgo relation.SeqModelInterface) MallocSeq {
 	opt := rockscache.NewDefaultOptions()
 	opt.EmptyExpire = time.Second * 3
+	opt.Delay = 0
 	return &seqCache{
-		rdb:         rdb,
-		mgo:         mgo,
-		rocks:       rockscache.NewClient(rdb, opt),
-		lockExpire:  time.Minute * 10,
-		seqExpire:   time.Hour * 24,
-		groupMinNum: 1000,
-		userMinNum:  100,
+		rdb:          rdb,
+		mgo:          mgo,
+		rocks:        rockscache.NewClient(rdb, opt),
+		lockExpire:   time.Minute * 1,
+		seqExpire:    time.Hour * 24 * 7,
+		minSeqExpire: time.Hour * 1,
+		groupMinNum:  1000,
+		userMinNum:   100,
 	}
 }
 
 type seqCache struct {
-	rdb         redis.UniversalClient
-	rocks       *rockscache.Client
-	mgo         relation.SeqModelInterface
-	lockExpire  time.Duration
-	seqExpire   time.Duration
-	groupMinNum int64
-	userMinNum  int64
+	rdb          redis.UniversalClient
+	rocks        *rockscache.Client
+	mgo          relation.SeqModelInterface
+	lockExpire   time.Duration
+	seqExpire    time.Duration
+	minSeqExpire time.Duration
+	groupMinNum  int64
+	userMinNum   int64
+}
+
+func (s *seqCache) GetMaxSeq(ctx context.Context, conversationID string) (int64, error) {
+	for i := 0; i < 10; i++ {
+		res, err := s.rdb.LIndex(ctx, cachekey.GetMallocSeqKey(conversationID), 0).Int64()
+		if err == nil {
+			return res, nil
+		} else if err != redis.Nil {
+			return 0, errs.Wrap(err)
+		}
+		if err := s.mallocSeq(ctx, conversationID, 0, nil); err != nil {
+			return 0, err
+		}
+	}
+	return 0, errs.Wrap(errors.New("get seq failed"))
+}
+
+func (s *seqCache) GetMinSeq(ctx context.Context, conversationID string) (int64, error) {
+	return getCache[int64](ctx, s.rocks, cachekey.GetMinSeqKey(conversationID), s.minSeqExpire, func(ctx context.Context) (int64, error) {
+		return s.mgo.GetMinSeq(ctx, conversationID)
+	})
+}
+
+func (s *seqCache) SetMinSeq(ctx context.Context, conversationID string, seq int64) error {
+	if err := s.mgo.SetMinSeq(ctx, conversationID, seq); err != nil {
+		return err
+	}
+	s.deleteMinSeqCache(ctx, conversationID)
+	return nil
 }
 
 func (s *seqCache) Malloc(ctx context.Context, conversationID string, size int64) ([]int64, error) {
 	if size <= 0 {
 		return nil, errs.Wrap(errors.New("size must be greater than 0"))
 	}
-	seqKey := cachekey.GetMallocSeq(conversationID)
-	lockKey := cachekey.GetMallocSeqLock(conversationID)
+	seqKey := cachekey.GetMallocSeqKey(conversationID)
+	lockKey := cachekey.GetMallocSeqLockKey(conversationID)
 	for i := 0; i < 10; i++ {
 		seqs, err := s.lpop(ctx, seqKey, lockKey, size)
 		if err != nil {
@@ -115,23 +151,36 @@ func (s *seqCache) getMongoStepSize(conversationID string, size int64) int64 {
 }
 
 func (s *seqCache) mallocSeq(ctx context.Context, conversationID string, size int64, seqs *[]int64) error {
-	_, err := getCache[string](ctx, s.rocks, cachekey.GetMallocSeqLock(conversationID), s.lockExpire, func(ctx context.Context) (string, error) {
+	var delMinSeqKey bool
+	_, err := getCache[string](ctx, s.rocks, cachekey.GetMallocSeqLockKey(conversationID), s.lockExpire, func(ctx context.Context) (string, error) {
 		res, err := s.mgo.Malloc(ctx, conversationID, s.getMongoStepSize(conversationID, size))
 		if err != nil {
 			return "", err
 		}
-		if len(*seqs) > 0 && (*seqs)[len(*seqs)-1]+1 == res[0] {
-			n := size - int64(len(*seqs))
-			*seqs = append(*seqs, res[:n]...)
-			res = res[n:]
-		} else {
-			*seqs = res[:size]
-			res = res[size:]
+		delMinSeqKey = res[0] == 1
+		if seqs != nil && size > 0 {
+			if len(*seqs) > 0 && (*seqs)[len(*seqs)-1]+1 == res[0] {
+				n := size - int64(len(*seqs))
+				*seqs = append(*seqs, res[:n]...)
+				res = res[n:]
+			} else {
+				*seqs = res[:size]
+				res = res[size:]
+			}
 		}
-		if err := s.push(ctx, cachekey.GetMallocSeq(conversationID), res); err != nil {
+		if err := s.push(ctx, cachekey.GetMallocSeqKey(conversationID), res); err != nil {
 			return "", err
 		}
 		return strconv.Itoa(int(time.Now().UnixMicro())), nil
 	})
+	if delMinSeqKey {
+		s.deleteMinSeqCache(ctx, conversationID)
+	}
 	return err
+}
+
+func (s *seqCache) deleteMinSeqCache(ctx context.Context, conversationID string) {
+	if err := s.rocks.TagAsDeleted2(ctx, cachekey.GetMinSeqKey(conversationID)); err != nil {
+		log.ZError(ctx, "delete min seq", err, "conversationID", conversationID)
+	}
 }

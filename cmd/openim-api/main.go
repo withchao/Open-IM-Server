@@ -17,6 +17,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -63,6 +65,14 @@ func run(port int, proPort int) error {
 		log.ZError(context.Background(), "Failed to initialize Redis", err)
 		return err
 	}
+	cli, err := unrelation.NewMongo()
+	if err != nil {
+		return err
+	}
+	seqDB, err := mgo.NewSeq(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
 	log.ZInfo(context.Background(), "api start init discov client")
 
 	var client discoveryregistry.SvcDiscoveryRegistry
@@ -86,7 +96,7 @@ func run(port int, proPort int) error {
 	}
 
 	log.ZInfo(context.Background(), "api register public config to discov success")
-	router := api.NewGinRouter(client, rdb)
+	router := api.NewGinRouter(client, rdb, seqDB)
 	if config.Config.Prometheus.Enable {
 		p := ginprom.NewPrometheus("app", prommetrics.GetGinCusMetrics("Api"))
 		p.SetListenAddress(fmt.Sprintf(":%d", proPort))

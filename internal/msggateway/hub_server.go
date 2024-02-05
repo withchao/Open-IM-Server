@@ -16,6 +16,8 @@ package msggateway
 
 import (
 	"context"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 
 	"google.golang.org/grpc"
 
@@ -36,8 +38,15 @@ func (s *Server) InitServer(disCov discoveryregistry.SvcDiscoveryRegistry, serve
 	if err != nil {
 		return err
 	}
-
-	msgModel := cache.NewMsgCacheModel(rdb)
+	cli, err := unrelation.NewMongo()
+	if err != nil {
+		return err
+	}
+	seq, err := mgo.NewSeq(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
+	msgModel := cache.NewMsgCacheModel(rdb, seq)
 	s.LongConnServer.SetDiscoveryRegistry(disCov)
 	s.LongConnServer.SetCacheHandler(msgModel)
 	msggateway.RegisterMsgGatewayServer(server, s)

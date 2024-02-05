@@ -16,6 +16,7 @@ package msg
 
 import (
 	"context"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpccache"
 
 	"google.golang.org/grpc"
@@ -73,7 +74,11 @@ func Start(client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err := mongo.CreateMsgIndex(); err != nil {
 		return err
 	}
-	cacheModel := cache.NewMsgCacheModel(rdb)
+	seq, err := mgo.NewSeq(mongo.GetDatabase())
+	if err != nil {
+		return err
+	}
+	cacheModel := cache.NewMsgCacheModel(rdb, seq)
 	msgDocModel := unrelation.NewMsgMongoDriver(mongo.GetDatabase())
 	conversationClient := rpcclient.NewConversationRpcClient(client)
 	userRpcClient := rpcclient.NewUserRpcClient(client)

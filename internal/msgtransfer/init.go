@@ -17,6 +17,7 @@ package msgtransfer
 import (
 	"errors"
 	"fmt"
+	"github.com/openimsdk/open-im-server/v3/pkg/common/db/mgo"
 	"log"
 	"net/http"
 	"sync"
@@ -55,6 +56,10 @@ func StartTransfer(prometheusPort int) error {
 	if err := mongo.CreateMsgIndex(); err != nil {
 		return err
 	}
+	seq, err := mgo.NewSeq(mongo.GetDatabase())
+	if err != nil {
+		return err
+	}
 	client, err := kdisc.NewDiscoveryRegister(config.Config.Envs.Discovery)
 	/*
 		client, err := openkeeper.NewClient(config.Config.Zookeeper.ZkAddr, config.Config.Zookeeper.Schema,
@@ -67,7 +72,7 @@ func StartTransfer(prometheusPort int) error {
 		return err
 	}
 	client.AddOption(mw.GrpcClient(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"LoadBalancingPolicy": "%s"}`, "round_robin")))
-	msgModel := cache.NewMsgCacheModel(rdb)
+	msgModel := cache.NewMsgCacheModel(rdb, seq)
 	msgDocModel := unrelation.NewMsgMongoDriver(mongo.GetDatabase())
 	msgDatabase := controller.NewCommonMsgDatabase(msgDocModel, msgModel)
 	conversationRpcClient := rpcclient.NewConversationRpcClient(client)
