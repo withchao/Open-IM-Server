@@ -24,7 +24,7 @@ type MallocSeq interface {
 func NewSeqCache(rdb redis.UniversalClient, mgo relation.SeqModelInterface) MallocSeq {
 	opt := rockscache.NewDefaultOptions()
 	opt.EmptyExpire = time.Second * 3
-	opt.Delay = 0
+	opt.Delay = time.Second / 2
 	return &seqCache{
 		rdb:          rdb,
 		mgo:          mgo,
