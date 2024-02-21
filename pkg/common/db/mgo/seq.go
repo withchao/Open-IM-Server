@@ -13,6 +13,7 @@ import (
 
 func NewSeq(db *mongo.Database) (*SeqMongo, error) {
 	coll := db.Collection("seq")
+
 	return &SeqMongo{coll: coll}, nil
 }
 

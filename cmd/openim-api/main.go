@@ -73,6 +73,10 @@ func run(port int, proPort int) error {
 	if err != nil {
 		return err
 	}
+	seqUserDB, err := mgo.NewSeqUser(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
 	log.ZInfo(context.Background(), "api start init discov client")
 
 	var client discoveryregistry.SvcDiscoveryRegistry
@@ -96,7 +100,7 @@ func run(port int, proPort int) error {
 	}
 
 	log.ZInfo(context.Background(), "api register public config to discov success")
-	router := api.NewGinRouter(client, rdb, seqDB)
+	router := api.NewGinRouter(client, rdb, seqDB, seqUserDB)
 	if config.Config.Prometheus.Enable {
 		p := ginprom.NewPrometheus("app", prommetrics.GetGinCusMetrics("Api"))
 		p.SetListenAddress(fmt.Sprintf(":%d", proPort))

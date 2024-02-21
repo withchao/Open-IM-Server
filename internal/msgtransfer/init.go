@@ -60,6 +60,10 @@ func StartTransfer(prometheusPort int) error {
 	if err != nil {
 		return err
 	}
+	seqUser, err := mgo.NewSeqUser(mongo.GetDatabase())
+	if err != nil {
+		return err
+	}
 	client, err := kdisc.NewDiscoveryRegister(config.Config.Envs.Discovery)
 	/*
 		client, err := openkeeper.NewClient(config.Config.Zookeeper.ZkAddr, config.Config.Zookeeper.Schema,
@@ -72,7 +76,7 @@ func StartTransfer(prometheusPort int) error {
 		return err
 	}
 	client.AddOption(mw.GrpcClient(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"LoadBalancingPolicy": "%s"}`, "round_robin")))
-	msgModel := cache.NewMsgCacheModel(rdb, seq)
+	msgModel := cache.NewMsgCacheModel(rdb, seq, seqUser)
 	msgDocModel := unrelation.NewMsgMongoDriver(mongo.GetDatabase())
 	msgDatabase := controller.NewCommonMsgDatabase(msgDocModel, msgModel)
 	conversationRpcClient := rpcclient.NewConversationRpcClient(client)

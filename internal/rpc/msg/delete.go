@@ -166,7 +166,7 @@ func (m *msgServer) clearConversation(
 	}
 	isSyncSelf, isSyncOther := m.validateDeleteSyncOpt(deleteSyncOpt)
 	if !isSyncOther {
-		if err := m.MsgDatabase.SetUserConversationsMinSeqs(ctx, userID, m.getMinSeqs(maxSeqs)); err != nil {
+		if err := m.SetUserConversationsMinSeqs(ctx, userID, m.getMinSeqs(maxSeqs)); err != nil {
 			return err
 		}
 		// notification 2 self

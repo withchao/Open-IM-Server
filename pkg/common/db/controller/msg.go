@@ -85,10 +85,10 @@ type CommonMsgDatabase interface {
 	GetMinSeqs(ctx context.Context, conversationIDs []string) (map[string]int64, error)
 	GetMinSeq(ctx context.Context, conversationID string) (int64, error)
 	GetConversationUserMinSeq(ctx context.Context, conversationID string, userID string) (int64, error)
-	GetConversationUserMinSeqs(ctx context.Context, conversationID string, userIDs []string) (map[string]int64, error)
-	SetConversationUserMinSeq(ctx context.Context, conversationID string, userID string, minSeq int64) error
-	SetConversationUserMinSeqs(ctx context.Context, conversationID string, seqs map[string]int64) (err error)
-	SetUserConversationsMinSeqs(ctx context.Context, userID string, seqs map[string]int64) (err error)
+	//GetConversationUserMinSeqs(ctx context.Context, conversationID string, userIDs []string) (map[string]int64, error)
+	//SetConversationUserMinSeq(ctx context.Context, conversationID string, userID string, minSeq int64) error
+	//SetConversationUserMinSeqs(ctx context.Context, conversationID string, seqs map[string]int64) (err error)
+	//SetUserConversationsMinSeqs(ctx context.Context, userID string, seqs map[string]int64) (err error)
 	SetHasReadSeq(ctx context.Context, userID string, conversationID string, hasReadSeq int64) error
 	GetHasReadSeqs(ctx context.Context, userID string, conversationIDs []string) (map[string]int64, error)
 	GetHasReadSeq(ctx context.Context, userID string, conversationID string) (int64, error)
@@ -142,7 +142,11 @@ func InitCommonMsgDatabase(rdb redis.UniversalClient, database *mongo.Database) 
 	if err != nil {
 		return nil, err
 	}
-	cacheModel := cache.NewMsgCacheModel(rdb, seq)
+	seqUser, err := mgo.NewSeqUser(database)
+	if err != nil {
+		return nil, err
+	}
+	cacheModel := cache.NewMsgCacheModel(rdb, seq, seqUser)
 	msgDocModel := unrelation.NewMsgMongoDriver(database)
 	return NewCommonMsgDatabase(msgDocModel, cacheModel), nil
 }
@@ -681,22 +685,7 @@ func (db *commonMsgDatabase) GetMsgBySeqs(ctx context.Context, userID string, co
 			log.ZError(ctx, "get message from redis exception", err, "failedSeqs", failedSeqs, "conversationID", conversationID)
 		}
 	}
-	log.ZInfo(
-		ctx,
-		"db.cache.GetMessagesBySeq",
-		"userID",
-		userID,
-		"conversationID",
-		conversationID,
-		"seqs",
-		seqs,
-		"successMsgs",
-		len(successMsgs),
-		"failedSeqs",
-		failedSeqs,
-		"conversationID",
-		conversationID,
-	)
+	log.ZInfo(ctx, "db.cache.GetMessagesBySeq", "userID", userID, "conversationID", conversationID, "seqs", seqs, "successMsgs", len(successMsgs), "failedSeqs", failedSeqs, "conversationID", conversationID)
 
 	if len(failedSeqs) > 0 {
 		mongoMsgs, err := db.getMsgBySeqs(ctx, userID, conversationID, failedSeqs)
@@ -940,21 +929,21 @@ func (db *commonMsgDatabase) GetConversationUserMinSeq(ctx context.Context, conv
 	return db.cache.GetConversationUserMinSeq(ctx, conversationID, userID)
 }
 
-func (db *commonMsgDatabase) GetConversationUserMinSeqs(ctx context.Context, conversationID string, userIDs []string) (map[string]int64, error) {
-	return db.cache.GetConversationUserMinSeqs(ctx, conversationID, userIDs)
-}
+//func (db *commonMsgDatabase) GetConversationUserMinSeqs(ctx context.Context, conversationID string, userIDs []string) (map[string]int64, error) {
+//	return db.cache.GetConversationUserMinSeqs(ctx, conversationID, userIDs)
+//}
 
 func (db *commonMsgDatabase) SetConversationUserMinSeq(ctx context.Context, conversationID string, userID string, minSeq int64) error {
 	return db.cache.SetConversationUserMinSeq(ctx, conversationID, userID, minSeq)
 }
 
-func (db *commonMsgDatabase) SetConversationUserMinSeqs(ctx context.Context, conversationID string, seqs map[string]int64) (err error) {
-	return db.cache.SetConversationUserMinSeqs(ctx, conversationID, seqs)
-}
-
-func (db *commonMsgDatabase) SetUserConversationsMinSeqs(ctx context.Context, userID string, seqs map[string]int64) error {
-	return db.cache.SetUserConversationsMinSeqs(ctx, userID, seqs)
-}
+//func (db *commonMsgDatabase) SetConversationUserMinSeqs(ctx context.Context, conversationID string, seqs map[string]int64) (err error) {
+//	return db.cache.SetConversationUserMinSeqs(ctx, conversationID, seqs)
+//}
+//
+//func (db *commonMsgDatabase) SetUserConversationsMinSeqs(ctx context.Context, userID string, seqs map[string]int64) error {
+//	return db.cache.SetUserConversationsMinSeqs(ctx, userID, seqs)
+//}
 
 func (db *commonMsgDatabase) UserSetHasReadSeqs(ctx context.Context, userID string, hasReadSeqs map[string]int64) error {
 	return db.cache.UserSetHasReadSeqs(ctx, userID, hasReadSeqs)

@@ -59,12 +59,16 @@ func Start(client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err != nil {
 		return err
 	}
+	seqUser, err := mgo.NewSeqUser(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
 	userRpcClient := rpcclient.NewUserRpcClient(client)
 	pbauth.RegisterAuthServer(server, &authServer{
 		userRpcClient:  &userRpcClient,
 		RegisterCenter: client,
 		authDatabase: controller.NewAuthDatabase(
-			cache.NewMsgCacheModel(rdb, seq),
+			cache.NewMsgCacheModel(rdb, seq, seqUser),
 			config.Config.Secret,
 			config.Config.TokenPolicy.Expire,
 		),

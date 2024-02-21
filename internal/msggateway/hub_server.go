@@ -46,7 +46,11 @@ func (s *Server) InitServer(disCov discoveryregistry.SvcDiscoveryRegistry, serve
 	if err != nil {
 		return err
 	}
-	msgModel := cache.NewMsgCacheModel(rdb, seq)
+	seqUser, err := mgo.NewSeqUser(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
+	msgModel := cache.NewMsgCacheModel(rdb, seq, seqUser)
 	s.LongConnServer.SetDiscoveryRegistry(disCov)
 	s.LongConnServer.SetCacheHandler(msgModel)
 	msggateway.RegisterMsgGatewayServer(server, s)

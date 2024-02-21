@@ -45,7 +45,11 @@ func Start(disCov discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err != nil {
 		return err
 	}
-	cacheModel := cache.NewMsgCacheModel(rdb, seq)
+	seqUser, err := mgo.NewSeqUser(cli.GetDatabase())
+	if err != nil {
+		return err
+	}
+	cacheModel := cache.NewMsgCacheModel(rdb, seq, seqUser)
 	offlinePusher := offlinepush.NewOfflinePusher(cacheModel)
 	database := controller.NewPushDatabase(cacheModel)
 

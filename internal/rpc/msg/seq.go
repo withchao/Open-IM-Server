@@ -16,7 +16,6 @@ package msg
 
 import (
 	"context"
-
 	pbmsg "github.com/OpenIMSDK/protocol/msg"
 )
 
@@ -53,4 +52,14 @@ func (m *msgServer) GetMsgByConversationIDs(ctx context.Context, req *pbmsg.GetM
 		return nil, err
 	}
 	return &pbmsg.GetMsgByConversationIDsResp{MsgDatas: Msgs}, nil
+}
+
+func (m *msgServer) SetUserConversationsMinSeqs(ctx context.Context, userID string, seqs map[string]int64) error {
+
+	return nil
+}
+
+func (m *msgServer) SetUserConversationsMaxSeqs(ctx context.Context, userID string, seqs map[string]int64) error {
+
+	return nil
 }

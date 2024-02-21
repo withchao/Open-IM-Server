@@ -44,7 +44,7 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
 )
 
-func NewGinRouter(discov discoveryregistry.SvcDiscoveryRegistry, rdb redis.UniversalClient, seq relation.SeqModelInterface) *gin.Engine {
+func NewGinRouter(discov discoveryregistry.SvcDiscoveryRegistry, rdb redis.UniversalClient, seq relation.SeqModelInterface, seqUser relation.SeqUserModelInterface) *gin.Engine {
 	discov.AddOption(mw.GrpcClient(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"LoadBalancingPolicy": "%s"}`, "round_robin"))) // 默认RPC中间件
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New()
@@ -64,7 +64,7 @@ func NewGinRouter(discov discoveryregistry.SvcDiscoveryRegistry, rdb redis.Unive
 
 	u := NewUserApi(*userRpc)
 	m := NewMessageApi(messageRpc, userRpc)
-	ParseToken := GinParseToken(rdb, seq)
+	ParseToken := GinParseToken(rdb, seq, seqUser)
 	userRouterGroup := r.Group("/user")
 	{
 		userRouterGroup.POST("/user_register", u.UserRegister)
@@ -225,9 +225,9 @@ func NewGinRouter(discov discoveryregistry.SvcDiscoveryRegistry, rdb redis.Unive
 	return r
 }
 
-func GinParseToken(rdb redis.UniversalClient, mgo relation.SeqModelInterface) gin.HandlerFunc {
+func GinParseToken(rdb redis.UniversalClient, mgo relation.SeqModelInterface, seqUser relation.SeqUserModelInterface) gin.HandlerFunc {
 	dataBase := controller.NewAuthDatabase(
-		cache.NewMsgCacheModel(rdb, mgo),
+		cache.NewMsgCacheModel(rdb, mgo, seqUser),
 		config.Config.Secret,
 		config.Config.TokenPolicy.Expire,
 	)

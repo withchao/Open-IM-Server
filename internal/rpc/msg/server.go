@@ -78,7 +78,11 @@ func Start(client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err != nil {
 		return err
 	}
-	cacheModel := cache.NewMsgCacheModel(rdb, seq)
+	seqUser, err := mgo.NewSeqUser(mongo.GetDatabase())
+	if err != nil {
+		return err
+	}
+	cacheModel := cache.NewMsgCacheModel(rdb, seq, seqUser)
 	msgDocModel := unrelation.NewMsgMongoDriver(mongo.GetDatabase())
 	conversationClient := rpcclient.NewConversationRpcClient(client)
 	userRpcClient := rpcclient.NewUserRpcClient(client)

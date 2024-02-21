@@ -56,6 +56,10 @@ func Start(client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	if err != nil {
 		return err
 	}
+	seqUser, err := mgo.NewSeqUser(mongo.GetDatabase())
+	if err != nil {
+		return err
+	}
 	apiURL := config.Config.Object.ApiURL
 	if apiURL == "" {
 		return fmt.Errorf("api url is empty")
@@ -89,7 +93,7 @@ func Start(client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) e
 	}
 	third.RegisterThirdServer(server, &thirdServer{
 		apiURL:        apiURL,
-		thirdDatabase: controller.NewThirdDatabase(cache.NewMsgCacheModel(rdb, seqDB), logdb),
+		thirdDatabase: controller.NewThirdDatabase(cache.NewMsgCacheModel(rdb, seqDB, seqUser), logdb),
 		userRpcClient: rpcclient.NewUserRpcClient(client),
 		s3dataBase:    controller.NewS3Database(rdb, o, s3db),
 		defaultExpire: time.Hour * 24 * 7,
