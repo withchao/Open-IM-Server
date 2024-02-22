@@ -369,10 +369,9 @@ func (c *msgCache) allMessageCacheKey(conversationID string) string {
 }
 
 func (c *msgCache) GetMessagesBySeq(ctx context.Context, conversationID string, seqs []int64) (seqMsgs []*sdkws.MsgData, failedSeqs []int64, err error) {
-	if config.Config.Redis.EnablePipeline {
-		return c.PipeGetMessagesBySeq(ctx, conversationID, seqs)
-	}
-
+	//if config.Config.Redis.EnablePipeline {
+	//	return c.PipeGetMessagesBySeq(ctx, conversationID, seqs)
+	//}
 	return c.ParallelGetMessagesBySeq(ctx, conversationID, seqs)
 }
 
