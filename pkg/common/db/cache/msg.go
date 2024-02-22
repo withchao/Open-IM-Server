@@ -469,9 +469,9 @@ func (c *msgCache) ParallelGetMessagesBySeq(ctx context.Context, conversationID 
 }
 
 func (c *msgCache) SetMessageToCache(ctx context.Context, conversationID string, msgs []*sdkws.MsgData) (int, error) {
-	if config.Config.Redis.EnablePipeline {
-		return c.PipeSetMessageToCache(ctx, conversationID, msgs)
-	}
+	//if config.Config.Redis.EnablePipeline {
+	//	return c.PipeSetMessageToCache(ctx, conversationID, msgs)
+	//}
 	return c.ParallelSetMessageToCache(ctx, conversationID, msgs)
 }
 
