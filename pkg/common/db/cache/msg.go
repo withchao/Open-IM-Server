@@ -376,42 +376,43 @@ func (c *msgCache) GetMessagesBySeq(ctx context.Context, conversationID string, 
 }
 
 func (c *msgCache) PipeGetMessagesBySeq(ctx context.Context, conversationID string, seqs []int64) (seqMsgs []*sdkws.MsgData, failedSeqs []int64, err error) {
-	pipe := c.rdb.Pipeline()
-
-	results := []*redis.StringCmd{}
-	for _, seq := range seqs {
-		results = append(results, pipe.Get(ctx, c.getMessageCacheKey(conversationID, seq)))
-	}
-
-	_, err = pipe.Exec(ctx)
-	if err != nil && err != redis.Nil {
-		return seqMsgs, failedSeqs, errs.Wrap(err, "pipe.get")
-	}
-
-	for idx, res := range results {
-		seq := seqs[idx]
-		if res.Err() != nil {
-			log.ZError(ctx, "GetMessagesBySeq failed", err, "conversationID", conversationID, "seq", seq, "err", res.Err())
-			failedSeqs = append(failedSeqs, seq)
-			continue
-		}
-
-		msg := sdkws.MsgData{}
-		if err = msgprocessor.String2Pb(res.Val(), &msg); err != nil {
-			log.ZError(ctx, "GetMessagesBySeq Unmarshal failed", err, "res", res, "conversationID", conversationID, "seq", seq)
-			failedSeqs = append(failedSeqs, seq)
-			continue
-		}
-
-		if msg.Status == constant.MsgDeleted {
-			failedSeqs = append(failedSeqs, seq)
-			continue
-		}
-
-		seqMsgs = append(seqMsgs, &msg)
-	}
-
-	return
+	return c.ParallelGetMessagesBySeq(ctx, conversationID, seqs)
+	//pipe := c.rdb.Pipeline()
+	//
+	//results := []*redis.StringCmd{}
+	//for _, seq := range seqs {
+	//	results = append(results, pipe.Get(ctx, c.getMessageCacheKey(conversationID, seq)))
+	//}
+	//
+	//_, err = pipe.Exec(ctx)
+	//if err != nil && err != redis.Nil {
+	//	return seqMsgs, failedSeqs, errs.Wrap(err, "pipe.get")
+	//}
+	//
+	//for idx, res := range results {
+	//	seq := seqs[idx]
+	//	if res.Err() != nil {
+	//		log.ZError(ctx, "GetMessagesBySeq failed", err, "conversationID", conversationID, "seq", seq, "err", res.Err())
+	//		failedSeqs = append(failedSeqs, seq)
+	//		continue
+	//	}
+	//
+	//	msg := sdkws.MsgData{}
+	//	if err = msgprocessor.String2Pb(res.Val(), &msg); err != nil {
+	//		log.ZError(ctx, "GetMessagesBySeq Unmarshal failed", err, "res", res, "conversationID", conversationID, "seq", seq)
+	//		failedSeqs = append(failedSeqs, seq)
+	//		continue
+	//	}
+	//
+	//	if msg.Status == constant.MsgDeleted {
+	//		failedSeqs = append(failedSeqs, seq)
+	//		continue
+	//	}
+	//
+	//	seqMsgs = append(seqMsgs, &msg)
+	//}
+	//
+	//return
 }
 
 func (c *msgCache) ParallelGetMessagesBySeq(ctx context.Context, conversationID string, seqs []int64) (seqMsgs []*sdkws.MsgData, failedSeqs []int64, err error) {
