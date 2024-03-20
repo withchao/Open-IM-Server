@@ -20,8 +20,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/tools/utils"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/tools/utils"
 )
 
 type UserConnContext struct {

@@ -25,19 +25,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/msggateway"
-	"github.com/OpenIMSDK/tools/apiresp"
-	"github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/go-playground/validator/v10"
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/prommetrics"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/msggateway"
+	"github.com/openimsdk/tools/apiresp"
+	"github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/utils"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 )
@@ -94,8 +94,8 @@ type kickHandler struct {
 }
 
 func (ws *WsServer) SetDiscoveryRegistry(disCov discoveryregistry.SvcDiscoveryRegistry, config *config.GlobalConfig) {
-	ws.MessageHandler = NewGrpcHandler(ws.validate, disCov, config)
-	u := rpcclient.NewUserRpcClient(disCov, config)
+	ws.MessageHandler = NewGrpcHandler(ws.validate, disCov, &config.RpcRegisterName)
+	u := rpcclient.NewUserRpcClient(disCov, config.RpcRegisterName.OpenImUserName, &config.Manager, &config.IMAdmin)
 	ws.userClient = &u
 	ws.disCov = disCov
 }
@@ -107,12 +107,12 @@ func (ws *WsServer) SetUserOnlineStatus(ctx context.Context, client *Client, sta
 	}
 	switch status {
 	case constant.Online:
-		err := CallbackUserOnline(ctx, ws.globalConfig, client.UserID, client.PlatformID, client.IsBackground, client.ctx.GetConnID())
+		err := CallbackUserOnline(ctx, &ws.globalConfig.Callback, client.UserID, client.PlatformID, client.IsBackground, client.ctx.GetConnID())
 		if err != nil {
 			log.ZWarn(ctx, "CallbackUserOnline err", err)
 		}
 	case constant.Offline:
-		err := CallbackUserOffline(ctx, ws.globalConfig, client.UserID, client.PlatformID, client.ctx.GetConnID())
+		err := CallbackUserOffline(ctx, &ws.globalConfig.Callback, client.UserID, client.PlatformID, client.ctx.GetConnID())
 		if err != nil {
 			log.ZWarn(ctx, "CallbackUserOffline err", err)
 		}
@@ -129,7 +129,7 @@ func (ws *WsServer) UnRegister(c *Client) {
 
 func (ws *WsServer) Validate(s any) error {
 	if s == nil {
-		return errs.Wrap(errors.New("input cannot be nil"))
+		return errs.WrapMsg(errors.New("input cannot be nil"), "Validate: input is nil", "action", "validate", "dataType", "any")
 	}
 	return nil
 }
@@ -196,9 +196,9 @@ func (ws *WsServer) Run(done chan error) error {
 	go func() {
 		http.HandleFunc("/", ws.wsHandler)
 		err := server.ListenAndServe()
+		defer close(netDone)
 		if err != nil && err != http.ErrServerClosed {
-			netErr = errs.Wrap(err, "ws start err", server.Addr)
-			close(netDone)
+			netErr = errs.WrapMsg(err, "ws start err", server.Addr)
 		}
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -208,7 +208,7 @@ func (ws *WsServer) Run(done chan error) error {
 	case err = <-done:
 		sErr := server.Shutdown(ctx)
 		if sErr != nil {
-			return errs.Wrap(sErr, "shutdown err")
+			return errs.WrapMsg(sErr, "shutdown err")
 		}
 		close(shutdownDone)
 		if err != nil {
@@ -295,6 +295,7 @@ func (ws *WsServer) registerClient(client *Client) {
 			_ = ws.sendUserOnlineInfoToOtherNode(client.ctx, client)
 		}()
 	}
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -426,21 +427,21 @@ func (ws *WsServer) ParseWSArgs(r *http.Request) (args *WSArgs, err error) {
 	query := r.URL.Query()
 	v.MsgResp, _ = strconv.ParseBool(query.Get(MsgResp))
 	if ws.onlineUserConnNum.Load() >= ws.wsMaxConnNum {
-		return nil, errs.ErrConnOverMaxNumLimit.Wrap("over max conn num limit")
+		return nil, errs.ErrConnOverMaxNumLimit.WrapMsg("over max conn num limit")
 	}
 	if v.Token = query.Get(Token); v.Token == "" {
-		return nil, errs.ErrConnArgsErr.Wrap("token is empty")
+		return nil, errs.ErrConnArgsErr.WrapMsg("token is empty")
 	}
 	if v.UserID = query.Get(WsUserID); v.UserID == "" {
-		return nil, errs.ErrConnArgsErr.Wrap("sendID is empty")
+		return nil, errs.ErrConnArgsErr.WrapMsg("sendID is empty")
 	}
 	platformIDStr := query.Get(PlatformID)
 	if platformIDStr == "" {
-		return nil, errs.ErrConnArgsErr.Wrap("platformID is empty")
+		return nil, errs.ErrConnArgsErr.WrapMsg("platformID is empty")
 	}
 	platformID, err := strconv.Atoi(platformIDStr)
 	if err != nil {
-		return nil, errs.ErrConnArgsErr.Wrap("platformID is not int")
+		return nil, errs.ErrConnArgsErr.WrapMsg("platformID is not int")
 	}
 	v.PlatformID = platformID
 	if err = authverify.WsVerifyToken(v.Token, v.UserID, ws.globalConfig.Secret, platformID); err != nil {
@@ -462,7 +463,7 @@ func (ws *WsServer) ParseWSArgs(r *http.Request) (args *WSArgs, err error) {
 		case constant.KickedToken:
 			return nil, errs.ErrTokenKicked.Wrap()
 		default:
-			return nil, errs.ErrTokenUnknown.Wrap(fmt.Sprintf("token status is %d", v))
+			return nil, errs.ErrTokenUnknown.WrapMsg(fmt.Sprintf("token status is %d", v))
 		}
 	} else {
 		return nil, errs.ErrTokenNotExist.Wrap()

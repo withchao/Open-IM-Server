@@ -28,11 +28,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
 	"github.com/minio/minio-go/v7"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/s3"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
 )
 
 func (m *Minio) getImageThumbnailURL(ctx context.Context, name string, expire time.Duration, opt *s3.Image) (string, error) {
@@ -45,7 +45,7 @@ func (m *Minio) getImageThumbnailURL(ctx context.Context, name string, expire ti
 		return "", err
 	}
 	if !info.IsImg {
-		return "", errs.ErrData.Wrap("object not image")
+		return "", errs.ErrData.WrapMsg("object not image")
 	}
 	if opt.Width > info.Width || opt.Width <= 0 {
 		opt.Width = info.Width

@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/third"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/utils"
-	utils2 "github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	relationtb "github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/third"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/utils"
+	utils2 "github.com/openimsdk/tools/utils"
 )
 
 func genLogID() string {
@@ -70,7 +70,7 @@ func (t *thirdServer) UploadLogs(ctx context.Context, req *third.UploadLogsReq) 
 			}
 		}
 		if log.LogID == "" {
-			return nil, errs.ErrData.Wrap("LogModel id gen error")
+			return nil, errs.ErrData.WrapMsg("LogModel id gen error")
 		}
 		DBlogs = append(DBlogs, &log)
 	}
@@ -82,7 +82,7 @@ func (t *thirdServer) UploadLogs(ctx context.Context, req *third.UploadLogsReq) 
 }
 
 func (t *thirdServer) DeleteLogs(ctx context.Context, req *third.DeleteLogsReq) (*third.DeleteLogsResp, error) {
-	if err := authverify.CheckAdmin(ctx, t.config); err != nil {
+	if err := authverify.CheckAdmin(ctx, &t.config.Manager, &t.config.IMAdmin); err != nil {
 		return nil, err
 	}
 	userID := ""
@@ -95,7 +95,7 @@ func (t *thirdServer) DeleteLogs(ctx context.Context, req *third.DeleteLogsReq) 
 		logIDs = append(logIDs, log.LogID)
 	}
 	if ids := utils2.Single(req.LogIDs, logIDs); len(ids) > 0 {
-		return nil, errs.ErrRecordNotFound.Wrap(fmt.Sprintf("logIDs not found%#v", ids))
+		return nil, errs.ErrRecordNotFound.WrapMsg(fmt.Sprintf("logIDs not found%#v", ids))
 	}
 	err = t.thirdDatabase.DeleteLogs(ctx, req.LogIDs, userID)
 	if err != nil {
@@ -123,7 +123,7 @@ func dbToPbLogInfos(logs []*relationtb.LogModel) []*third.LogInfo {
 }
 
 func (t *thirdServer) SearchLogs(ctx context.Context, req *third.SearchLogsReq) (*third.SearchLogsResp, error) {
-	if err := authverify.CheckAdmin(ctx, t.config); err != nil {
+	if err := authverify.CheckAdmin(ctx, &t.config.Manager, &t.config.IMAdmin); err != nil {
 		return nil, err
 	}
 	var (
@@ -131,7 +131,7 @@ func (t *thirdServer) SearchLogs(ctx context.Context, req *third.SearchLogsReq) 
 		userIDs []string
 	)
 	if req.StartTime > req.EndTime {
-		return nil, errs.ErrArgs.Wrap("startTime>endTime")
+		return nil, errs.ErrArgs.WrapMsg("startTime>endTime")
 	}
 	if req.StartTime == 0 && req.EndTime == 0 {
 		t := time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)

@@ -17,11 +17,11 @@ package user
 import (
 	"context"
 
-	pbuser "github.com/OpenIMSDK/protocol/user"
-	"github.com/OpenIMSDK/tools/utils"
 	cbapi "github.com/openimsdk/open-im-server/v3/pkg/callbackstruct"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/http"
+	pbuser "github.com/openimsdk/protocol/user"
+	"github.com/openimsdk/tools/utils"
 )
 
 func CallbackBeforeUpdateUserInfo(ctx context.Context, globalConfig *config.GlobalConfig, req *pbuser.UpdateUserInfoReq) error {

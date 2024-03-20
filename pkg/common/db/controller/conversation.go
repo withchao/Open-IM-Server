@@ -18,11 +18,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/pagination"
-	"github.com/OpenIMSDK/tools/tx"
-	"github.com/OpenIMSDK/tools/utils"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/pagination"
+	"github.com/openimsdk/tools/tx"
+	"github.com/openimsdk/tools/utils"
+
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	relationtb "github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 	"github.com/openimsdk/open-im-server/v3/pkg/msgprocessor"

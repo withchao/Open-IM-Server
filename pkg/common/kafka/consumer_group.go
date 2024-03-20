@@ -20,8 +20,8 @@ import (
 	"strings"
 
 	"github.com/IBM/sarama"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
 )
 
 type MConsumerGroup struct {
@@ -52,7 +52,7 @@ func NewMConsumerGroup(consumerConfig *MConsumerGroupConfig, topics, addrs []str
 	SetupTLSConfig(consumerGroupConfig, tlsConfig)
 	consumerGroup, err := sarama.NewConsumerGroup(addrs, groupID, consumerGroupConfig)
 	if err != nil {
-		return nil, errs.Wrap(err, strings.Join(topics, ","), strings.Join(addrs, ","), groupID, consumerConfig.UserName, consumerConfig.Password)
+		return nil, errs.WrapMsg(err, strings.Join(topics, ","), strings.Join(addrs, ","), groupID, consumerConfig.UserName, consumerConfig.Password)
 	}
 
 	return &MConsumerGroup{

@@ -23,18 +23,18 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/go-redis/redis"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/controller"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/kafka"
 	"github.com/openimsdk/open-im-server/v3/pkg/msgprocessor"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/utils"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -80,12 +80,7 @@ type OnlineHistoryRedisConsumerHandler struct {
 	groupRpcClient        *rpcclient.GroupRpcClient
 }
 
-func NewOnlineHistoryRedisConsumerHandler(
-	config *config.GlobalConfig,
-	database controller.CommonMsgDatabase,
-	conversationRpcClient *rpcclient.ConversationRpcClient,
-	groupRpcClient *rpcclient.GroupRpcClient,
-) (*OnlineHistoryRedisConsumerHandler, error) {
+func NewOnlineHistoryRedisConsumerHandler(kafkaConf *config.Kafka, database controller.CommonMsgDatabase, conversationRpcClient *rpcclient.ConversationRpcClient, groupRpcClient *rpcclient.GroupRpcClient) (*OnlineHistoryRedisConsumerHandler, error) {
 	var och OnlineHistoryRedisConsumerHandler
 	och.msgDatabase = database
 	och.msgDistributionCh = make(chan Cmd2Value) // no buffer channel
@@ -94,17 +89,18 @@ func NewOnlineHistoryRedisConsumerHandler(
 		och.chArrays[i] = make(chan Cmd2Value, 50)
 		go och.Run(i)
 	}
+
 	och.conversationRpcClient = conversationRpcClient
 	och.groupRpcClient = groupRpcClient
 	var err error
 
 	var tlsConfig *kafka.TLSConfig
-	if config.Kafka.TLS != nil {
+	if kafkaConf.TLS != nil {
 		tlsConfig = &kafka.TLSConfig{
-			CACrt:              config.Kafka.TLS.CACrt,
-			ClientCrt:          config.Kafka.TLS.ClientCrt,
-			ClientKey:          config.Kafka.TLS.ClientKey,
-			ClientKeyPwd:       config.Kafka.TLS.ClientKeyPwd,
+			CACrt:              kafkaConf.TLS.CACrt,
+			ClientCrt:          kafkaConf.TLS.ClientCrt,
+			ClientKey:          kafkaConf.TLS.ClientKey,
+			ClientKeyPwd:       kafkaConf.TLS.ClientKeyPwd,
 			InsecureSkipVerify: false,
 		}
 	}
@@ -113,11 +109,11 @@ func NewOnlineHistoryRedisConsumerHandler(
 		KafkaVersion:   sarama.V2_0_0_0,
 		OffsetsInitial: sarama.OffsetNewest,
 		IsReturnErr:    false,
-		UserName:       config.Kafka.Username,
-		Password:       config.Kafka.Password,
-	}, []string{config.Kafka.LatestMsgToRedis.Topic},
-		config.Kafka.Addr,
-		config.Kafka.ConsumerGroupID.MsgToRedis,
+		UserName:       kafkaConf.Username,
+		Password:       kafkaConf.Password,
+	}, []string{kafkaConf.LatestMsgToRedis.Topic},
+		kafkaConf.Addr,
+		kafkaConf.ConsumerGroupID.MsgToRedis,
 		tlsConfig,
 	)
 	// statistics.NewStatistics(&och.singleMsgSuccessCount, config.Config.ModuleName.MsgTransferName, fmt.Sprintf("%d
@@ -265,22 +261,13 @@ func (och *OnlineHistoryRedisConsumerHandler) handleNotification(
 	}
 }
 
-func (och *OnlineHistoryRedisConsumerHandler) toPushTopic(
-	ctx context.Context,
-	key, conversationID string,
-	msgs []*sdkws.MsgData,
-) {
+func (och *OnlineHistoryRedisConsumerHandler) toPushTopic(ctx context.Context, key, conversationID string, msgs []*sdkws.MsgData) {
 	for _, v := range msgs {
 		och.msgDatabase.MsgToPushMQ(ctx, key, conversationID, v) // nolint: errcheck
-
 	}
 }
 
-func (och *OnlineHistoryRedisConsumerHandler) handleMsg(
-	ctx context.Context,
-	key, conversationID string,
-	storageList, notStorageList []*sdkws.MsgData,
-) {
+func (och *OnlineHistoryRedisConsumerHandler) handleMsg(ctx context.Context, key, conversationID string, storageList, notStorageList []*sdkws.MsgData) {
 	och.toPushTopic(ctx, key, conversationID, notStorageList)
 	if len(storageList) > 0 {
 		lastSeq, isNewConversation, err := och.msgDatabase.BatchInsertChat2Cache(ctx, conversationID, storageList)

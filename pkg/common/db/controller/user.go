@@ -18,11 +18,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/user"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/pagination"
-	"github.com/OpenIMSDK/tools/tx"
-	"github.com/OpenIMSDK/tools/utils"
+	"github.com/openimsdk/protocol/user"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/pagination"
+	"github.com/openimsdk/tools/tx"
+	"github.com/openimsdk/tools/utils"
+
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 	unrelationtb "github.com/openimsdk/open-im-server/v3/pkg/common/db/table/unrelation"
@@ -127,7 +128,7 @@ func (u *userDatabase) FindWithError(ctx context.Context, userIDs []string) (use
 		return
 	}
 	if len(users) != len(userIDs) {
-		err = errs.ErrRecordNotFound.Wrap("userID not found")
+		err = errs.ErrRecordNotFound.WrapMsg("userID not found")
 	}
 	return
 }

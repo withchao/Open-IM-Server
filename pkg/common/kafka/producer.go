@@ -23,10 +23,10 @@ import (
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -160,10 +160,10 @@ func (p *Producer) SendMessage(ctx context.Context, key string, msg proto.Messag
 	// Marshal the protobuf message
 	bMsg, err := proto.Marshal(msg)
 	if err != nil {
-		return 0, 0, errs.Wrap(err, "kafka proto Marshal err")
+		return 0, 0, errs.WrapMsg(err, "kafka proto Marshal err")
 	}
 	if len(bMsg) == 0 {
-		return 0, 0, errs.Wrap(errEmptyMsg, "")
+		return 0, 0, errs.WrapMsg(errEmptyMsg, "kafka proto Marshal err")
 	}
 
 	// Prepare Kafka message

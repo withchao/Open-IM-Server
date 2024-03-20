@@ -21,11 +21,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mw/specialerror"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/dtm-labs/rockscache"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mw/specialerror"
+	"github.com/openimsdk/tools/utils"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -150,7 +150,7 @@ func getCache[T any](ctx context.Context, rcClient *rockscache.Client, key strin
 		}
 		bs, err := json.Marshal(t)
 		if err != nil {
-			return "", errs.Wrap(err, "marshal failed")
+			return "", errs.WrapMsg(err, "marshal failed")
 		}
 		write = true
 
@@ -163,12 +163,12 @@ func getCache[T any](ctx context.Context, rcClient *rockscache.Client, key strin
 		return t, nil
 	}
 	if v == "" {
-		return t, errs.ErrRecordNotFound.Wrap("cache is not found")
+		return t, errs.ErrRecordNotFound.WrapMsg("cache is not found")
 	}
 	err = json.Unmarshal([]byte(v), &t)
 	if err != nil {
 		errInfo := fmt.Sprintf("cache json.Unmarshal failed, key:%s, value:%s, expire:%s", key, v, expire)
-		return t, errs.Wrap(err, errInfo)
+		return t, errs.WrapMsg(err, errInfo)
 	}
 
 	return t, nil
@@ -240,14 +240,14 @@ func batchGetCache2[T any, K comparable](
 	return res, nil
 }
 
-//func batchGetCacheMap[T any](
+// func batchGetCacheMap[T any](
 //	ctx context.Context,
 //	rcClient *rockscache.Client,
 //	keys, originKeys []string,
 //	expire time.Duration,
 //	keyIndexFn func(s string, keys []string) (int, error),
 //	fn func(ctx context.Context) (map[string]T, error),
-//) (map[string]T, error) {
+// ) (map[string]T, error) {
 //	batchMap, err := rcClient.FetchBatch2(ctx, keys, expire, func(idxs []int) (m map[int]string, err error) {
 //		tArrays, err := fn(ctx)
 //		if err != nil {

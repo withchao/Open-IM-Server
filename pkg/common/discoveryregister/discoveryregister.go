@@ -18,12 +18,12 @@ import (
 	"errors"
 	"os"
 
-	"github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/errs"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/discoveryregister/direct"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/discoveryregister/kubernetes"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/discoveryregister/zookeeper"
+	"github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/errs"
 )
 
 // NewDiscoveryRegister creates a new service discovery and registry client based on the provided environment type.
@@ -35,12 +35,13 @@ func NewDiscoveryRegister(config *config.GlobalConfig) (discoveryregistry.SvcDis
 
 	switch config.Envs.Discovery {
 	case "zookeeper":
-		return zookeeper.NewZookeeperDiscoveryRegister(config)
+		return zookeeper.NewZookeeperDiscoveryRegister(&config.Zookeeper)
 	case "k8s":
 		return kubernetes.NewK8sDiscoveryRegister(config.RpcRegisterName.OpenImMessageGatewayName)
 	case "direct":
 		return direct.NewConnDirect(config)
 	default:
-		return nil, errs.Wrap(errors.New("envType not correct"))
+		errMsg := "unsupported discovery type"
+		return nil, errs.WrapMsg(errors.New(errMsg), errMsg, "type", config.Envs.Discovery)
 	}
 }

@@ -19,23 +19,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/dtm-labs/rockscache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/cachekey"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	relationtb "github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/utils"
 	"github.com/redis/go-redis/v9"
 )
 
 const (
 	groupExpireTime = time.Second * 60 * 60 * 12
-	//groupInfoKey        = "GROUP_INFO:"
-	//groupMemberIDsKey   = "GROUP_MEMBER_IDS:"
-	//groupMembersHashKey = "GROUP_MEMBERS_HASH2:"
-	//groupMemberInfoKey  = "GROUP_MEMBER_INFO:"
+	// GroupInfoKey        = "GROUP_INFO:"
+	// groupMemberIDsKey   = "GROUP_MEMBER_IDS:"
+	// groupMembersHashKey = "GROUP_MEMBERS_HASH2:"
+	// groupMemberInfoKey  = "GROUP_MEMBER_INFO:"
 	//joinedGroupsKey            = "JOIN_GROUPS_KEY:"
 	//groupMemberNumKey          = "GROUP_MEMBER_NUM_CACHE:"
 	//groupRoleLevelMemberIDsKey = "GROUP_ROLE_LEVEL_MEMBER_IDS:".
@@ -227,7 +227,7 @@ func (g *GroupCacheRedis) DelGroupAllRoleLevel(groupID string) GroupCache {
 
 func (g *GroupCacheRedis) GetGroupMembersHash(ctx context.Context, groupID string) (hashCode uint64, err error) {
 	if g.groupHash == nil {
-		return 0, errs.ErrInternalServer.Wrap("group hash is nil")
+		return 0, errs.ErrInternalServer.WrapMsg("group hash is nil")
 	}
 	return getCache(ctx, g.rcClient, g.getGroupMembersHashKey(groupID), g.expireTime, func(ctx context.Context) (uint64, error) {
 		return g.groupHash.GetGroupHash(ctx, groupID)
@@ -236,7 +236,7 @@ func (g *GroupCacheRedis) GetGroupMembersHash(ctx context.Context, groupID strin
 
 func (g *GroupCacheRedis) GetGroupMemberHashMap(ctx context.Context, groupIDs []string) (map[string]*relationtb.GroupSimpleUserID, error) {
 	if g.groupHash == nil {
-		return nil, errs.ErrInternalServer.Wrap("group hash is nil")
+		return nil, errs.ErrInternalServer.WrapMsg("group hash is nil")
 	}
 	res := make(map[string]*relationtb.GroupSimpleUserID)
 	for _, groupID := range groupIDs {
@@ -390,7 +390,7 @@ func (g *GroupCacheRedis) GetGroupOwner(ctx context.Context, groupID string) (*r
 		return nil, err
 	}
 	if len(members) == 0 {
-		return nil, errs.ErrRecordNotFound.Wrap(fmt.Sprintf("group %s owner not found", groupID))
+		return nil, errs.ErrRecordNotFound.WrapMsg(fmt.Sprintf("group %s owner not found", groupID))
 	}
 	return members[0], nil
 }

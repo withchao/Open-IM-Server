@@ -20,12 +20,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	pbmsg "github.com/OpenIMSDK/protocol/msg"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/convert"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
@@ -33,6 +27,12 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/kafka"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/prommetrics"
+	"github.com/openimsdk/protocol/constant"
+	pbmsg "github.com/openimsdk/protocol/msg"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/utils"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -100,53 +100,38 @@ type CommonMsgDatabase interface {
 	MsgToPushMQ(ctx context.Context, key, conversarionID string, msg2mq *sdkws.MsgData) (int32, int64, error)
 	MsgToMongoMQ(ctx context.Context, key, conversarionID string, msgs []*sdkws.MsgData, lastSeq int64) error
 
-	RangeUserSendCount(
-		ctx context.Context,
-		start time.Time,
-		end time.Time,
-		group bool,
-		ase bool,
-		pageNumber int32,
-		showNumber int32,
-	) (msgCount int64, userCount int64, users []*unrelationtb.UserCount, dateCount map[string]int64, err error)
-	RangeGroupSendCount(
-		ctx context.Context,
-		start time.Time,
-		end time.Time,
-		ase bool,
-		pageNumber int32,
-		showNumber int32,
-	) (msgCount int64, userCount int64, groups []*unrelationtb.GroupCount, dateCount map[string]int64, err error)
+	RangeUserSendCount(ctx context.Context, start time.Time, end time.Time, group bool, ase bool, pageNumber int32, showNumber int32) (msgCount int64, userCount int64, users []*unrelationtb.UserCount, dateCount map[string]int64, err error)
+	RangeGroupSendCount(ctx context.Context, start time.Time, end time.Time, ase bool, pageNumber int32, showNumber int32) (msgCount int64, userCount int64, groups []*unrelationtb.GroupCount, dateCount map[string]int64, err error)
 	ConvertMsgsDocLen(ctx context.Context, conversationIDs []string)
 }
 
-func NewCommonMsgDatabase(msgDocModel unrelationtb.MsgDocModelInterface, cacheModel cache.MsgModel, config *config.GlobalConfig) (CommonMsgDatabase, error) {
+func NewCommonMsgDatabase(msgDocModel unrelationtb.MsgDocModelInterface, cacheModel cache.MsgModel, kafkaConf *config.Kafka) (CommonMsgDatabase, error) {
 	producerConfig := &kafka.ProducerConfig{
-		ProducerAck:  config.Kafka.ProducerAck,
-		CompressType: config.Kafka.CompressType,
-		Username:     config.Kafka.Username,
-		Password:     config.Kafka.Password,
+		ProducerAck:  kafkaConf.ProducerAck,
+		CompressType: kafkaConf.CompressType,
+		Username:     kafkaConf.Username,
+		Password:     kafkaConf.Password,
 	}
 
 	var tlsConfig *kafka.TLSConfig
-	if config.Kafka.TLS != nil {
+	if kafkaConf.TLS != nil {
 		tlsConfig = &kafka.TLSConfig{
-			CACrt:              config.Kafka.TLS.CACrt,
-			ClientCrt:          config.Kafka.TLS.ClientCrt,
-			ClientKey:          config.Kafka.TLS.ClientKey,
-			ClientKeyPwd:       config.Kafka.TLS.ClientKeyPwd,
+			CACrt:              kafkaConf.TLS.CACrt,
+			ClientCrt:          kafkaConf.TLS.ClientCrt,
+			ClientKey:          kafkaConf.TLS.ClientKey,
+			ClientKeyPwd:       kafkaConf.TLS.ClientKeyPwd,
 			InsecureSkipVerify: false,
 		}
 	}
-	producerToRedis, err := kafka.NewKafkaProducer(config.Kafka.Addr, config.Kafka.LatestMsgToRedis.Topic, producerConfig, tlsConfig)
+	producerToRedis, err := kafka.NewKafkaProducer(kafkaConf.Addr, kafkaConf.LatestMsgToRedis.Topic, producerConfig, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
-	producerToMongo, err := kafka.NewKafkaProducer(config.Kafka.Addr, config.Kafka.MsgToMongo.Topic, producerConfig, tlsConfig)
+	producerToMongo, err := kafka.NewKafkaProducer(kafkaConf.Addr, kafkaConf.MsgToMongo.Topic, producerConfig, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
-	producerToPush, err := kafka.NewKafkaProducer(config.Kafka.Addr, config.Kafka.MsgToPush.Topic, producerConfig, tlsConfig)
+	producerToPush, err := kafka.NewKafkaProducer(kafkaConf.Addr, kafkaConf.MsgToPush.Topic, producerConfig, tlsConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +145,9 @@ func NewCommonMsgDatabase(msgDocModel unrelationtb.MsgDocModelInterface, cacheMo
 }
 
 func InitCommonMsgDatabase(rdb redis.UniversalClient, database *mongo.Database, config *config.GlobalConfig) (CommonMsgDatabase, error) {
-	cacheModel := cache.NewMsgCacheModel(rdb, config)
+	cacheModel := cache.NewMsgCacheModel(rdb, config.MsgCacheTimeout, &config.Redis)
 	msgDocModel := unrelation.NewMsgMongoDriver(database)
-	return NewCommonMsgDatabase(msgDocModel, cacheModel, config)
+	return NewCommonMsgDatabase(msgDocModel, cacheModel, &config.Kafka)
 }
 
 type commonMsgDatabase struct {
@@ -218,15 +203,15 @@ func (db *commonMsgDatabase) BatchInsertBlock(ctx context.Context, conversationI
 			var msg *unrelationtb.MsgDataModel
 			msg, ok = field.(*unrelationtb.MsgDataModel)
 			if msg != nil && msg.Seq != firstSeq+int64(i) {
-				return errs.ErrInternalServer.Wrap("seq is invalid")
+				return errs.ErrInternalServer.WrapMsg("seq is invalid")
 			}
 		case updateKeyRevoke:
 			_, ok = field.(*unrelationtb.RevokeModel)
 		default:
-			return errs.ErrInternalServer.Wrap("key is invalid")
+			return errs.ErrInternalServer.WrapMsg("key is invalid")
 		}
 		if !ok {
-			return errs.ErrInternalServer.Wrap("field type is invalid")
+			return errs.ErrInternalServer.WrapMsg("field type is invalid")
 		}
 	}
 	// Returns true if the document exists in the database, false if the document does not exist in the database
@@ -308,7 +293,7 @@ func (db *commonMsgDatabase) BatchInsertBlock(ctx context.Context, conversationI
 
 func (db *commonMsgDatabase) BatchInsertChat2DB(ctx context.Context, conversationID string, msgList []*sdkws.MsgData, currentMaxSeq int64) error {
 	if len(msgList) == 0 {
-		return errs.ErrArgs.Wrap("msgList is empty")
+		return errs.ErrArgs.WrapMsg("msgList is empty")
 	}
 	msgs := make([]any, len(msgList))
 	for i, msg := range msgList {
@@ -387,10 +372,10 @@ func (db *commonMsgDatabase) BatchInsertChat2Cache(ctx context.Context, conversa
 	}
 	lenList := len(msgs)
 	if int64(lenList) > db.msg.GetSingleGocMsgNum() {
-		return 0, false, errors.New("too large")
+		return 0, false, errs.WrapMsg(errors.New("message count exceeds limit"), "limit", db.msg.GetSingleGocMsgNum())
 	}
 	if lenList < 1 {
-		return 0, false, errors.New("too short as 0")
+		return 0, false, errs.WrapMsg(errors.New("no messages to insert"), "minCount", 1)
 	}
 	if errs.Unwrap(err) == redis.Nil {
 		isNew = true
@@ -402,6 +387,7 @@ func (db *commonMsgDatabase) BatchInsertChat2Cache(ctx context.Context, conversa
 		m.Seq = currentMaxSeq
 		userSeqMap[m.SendID] = m.Seq
 	}
+
 	failedNum, err := db.cache.SetMessageToCache(ctx, conversationID, msgs)
 	if err != nil {
 		prommetrics.MsgInsertRedisFailedCounter.Add(float64(failedNum))
@@ -409,11 +395,13 @@ func (db *commonMsgDatabase) BatchInsertChat2Cache(ctx context.Context, conversa
 	} else {
 		prommetrics.MsgInsertRedisSuccessCounter.Inc()
 	}
+
 	err = db.cache.SetMaxSeq(ctx, conversationID, currentMaxSeq)
 	if err != nil {
 		log.ZError(ctx, "db.cache.SetMaxSeq error", err, "conversationID", conversationID)
 		prommetrics.SeqSetFailedCounter.Inc()
 	}
+
 	err = db.cache.SetHasReadSeqs(ctx, conversationID, userSeqMap)
 	if err != nil {
 		log.ZError(ctx, "SetHasReadSeqs error", err, "userSeqMap", userSeqMap, "conversationID", conversationID)
@@ -578,7 +566,7 @@ func (db *commonMsgDatabase) GetMsgBySeqsRange(ctx context.Context, userID strin
 	}
 	//"begin" and "end" represent the actual startSeq and endSeq values that the user can retrieve.
 	if end < begin {
-		return 0, 0, nil, errs.ErrArgs.Wrap("seq end < begin")
+		return 0, 0, nil, errs.ErrArgs.WrapMsg("seq end < begin")
 	}
 	var seqs []int64
 	if end-begin+1 <= num {

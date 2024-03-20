@@ -14,21 +14,21 @@
 
 package unrelation
 
-//import (
+// import (
 //	"context"
 //)
 //
-//const (
+// const (
 //	CSuperGroup       = "super_group"
 //	CUserToSuperGroup = "user_to_super_group"
 //)
 //
-//type SuperGroupModel struct {
+// type SuperGroupModel struct {
 //	GroupID   string   `bson:"group_id"       json:"groupID"`
 //	MemberIDs []string `bson:"member_id_list" json:"memberIDList"`
 //}
 //
-//func (SuperGroupModel) TableName() string {
+// func (SuperGroupModel) TableName() string {
 //	return CSuperGroup
 //}
 //

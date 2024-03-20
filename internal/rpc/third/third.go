@@ -20,9 +20,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/third"
-	"github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/errs"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/controller"
@@ -33,11 +30,18 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/s3/oss"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
+	"github.com/openimsdk/protocol/third"
+	"github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/errs"
 	"google.golang.org/grpc"
 )
 
-func Start(config *config.GlobalConfig, client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) error {
-	mongo, err := unrelation.NewMongo(config)
+func Start(ctx context.Context, config *config.GlobalConfig, client discoveryregistry.SvcDiscoveryRegistry, server *grpc.Server) error {
+	rdb, err := cache.NewRedis(ctx, &config.Redis)
+	if err != nil {
+		return err
+	}
+	mongo, err := unrelation.NewMongoDB(ctx, &config.Mongo)
 	if err != nil {
 		return err
 	}
@@ -60,10 +64,7 @@ func Start(config *config.GlobalConfig, client discoveryregistry.SvcDiscoveryReg
 		apiURL += "/"
 	}
 	apiURL += "object/"
-	rdb, err := cache.NewRedis(config)
-	if err != nil {
-		return err
-	}
+
 	// Select the oss method according to the profile policy
 	enable := config.Object.Enable
 	var o s3.Interface
@@ -82,8 +83,8 @@ func Start(config *config.GlobalConfig, client discoveryregistry.SvcDiscoveryReg
 	}
 	third.RegisterThirdServer(server, &thirdServer{
 		apiURL:        apiURL,
-		thirdDatabase: controller.NewThirdDatabase(cache.NewMsgCacheModel(rdb, config), logdb),
-		userRpcClient: rpcclient.NewUserRpcClient(client, config),
+		thirdDatabase: controller.NewThirdDatabase(cache.NewMsgCacheModel(rdb, config.MsgCacheTimeout, &config.Redis), logdb),
+		userRpcClient: rpcclient.NewUserRpcClient(client, config.RpcRegisterName.OpenImUserName, &config.Manager, &config.IMAdmin),
 		s3dataBase:    controller.NewS3Database(rdb, o, s3db),
 		defaultExpire: time.Hour * 24 * 7,
 		config:        config,

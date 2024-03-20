@@ -16,20 +16,11 @@ package user
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"math/rand"
 	"strings"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	pbuser "github.com/OpenIMSDK/protocol/user"
-	registry "github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/pagination"
-	"github.com/OpenIMSDK/tools/tx"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/convert"
@@ -41,6 +32,15 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/unrelation"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient/notification"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/sdkws"
+	pbuser "github.com/openimsdk/protocol/user"
+	registry "github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/pagination"
+	"github.com/openimsdk/tools/tx"
+	"github.com/openimsdk/tools/utils"
 	"google.golang.org/grpc"
 )
 
@@ -55,22 +55,22 @@ type userServer struct {
 }
 
 func (s *userServer) GetGroupOnlineUser(ctx context.Context, req *pbuser.GetGroupOnlineUserReq) (*pbuser.GetGroupOnlineUserResp, error) {
-	//TODO implement me
+	// TODO implement me
 	panic("implement me")
 }
 
-func Start(config *config.GlobalConfig, client registry.SvcDiscoveryRegistry, server *grpc.Server) error {
-	rdb, err := cache.NewRedis(config)
+func Start(ctx context.Context, config *config.GlobalConfig, client registry.SvcDiscoveryRegistry, server *grpc.Server) error {
+	rdb, err := cache.NewRedis(ctx, &config.Redis)
 	if err != nil {
 		return err
 	}
-	mongo, err := unrelation.NewMongo(config)
+	mongo, err := unrelation.NewMongoDB(ctx, &config.Mongo)
 	if err != nil {
 		return err
 	}
 	users := make([]*tablerelation.UserModel, 0)
 	if len(config.IMAdmin.UserID) != len(config.IMAdmin.Nickname) {
-		return errs.Wrap(fmt.Errorf("the count of ImAdmin.UserID is not equal to the count of ImAdmin.Nickname"))
+		return errs.Wrap(errors.New("the count of ImAdmin.UserID is not equal to the count of ImAdmin.Nickname"))
 	}
 	for k, v := range config.IMAdmin.UserID {
 		users = append(users, &tablerelation.UserModel{UserID: v, Nickname: config.IMAdmin.Nickname[k], AppMangerLevel: constant.AppNotificationAdmin})
@@ -82,15 +82,15 @@ func Start(config *config.GlobalConfig, client registry.SvcDiscoveryRegistry, se
 	cache := cache.NewUserCacheRedis(rdb, userDB, cache.GetDefaultOpt())
 	userMongoDB := unrelation.NewUserMongoDriver(mongo.GetDatabase(config.Mongo.Database))
 	database := controller.NewUserDatabase(userDB, cache, tx.NewMongo(mongo.GetClient()), userMongoDB)
-	friendRpcClient := rpcclient.NewFriendRpcClient(client, config)
-	groupRpcClient := rpcclient.NewGroupRpcClient(client, config)
-	msgRpcClient := rpcclient.NewMessageRpcClient(client, config)
+	friendRpcClient := rpcclient.NewFriendRpcClient(client, config.RpcRegisterName.OpenImFriendName)
+	groupRpcClient := rpcclient.NewGroupRpcClient(client, config.RpcRegisterName.OpenImGroupName)
+	msgRpcClient := rpcclient.NewMessageRpcClient(client, config.RpcRegisterName.OpenImMsgName)
 	u := &userServer{
 		UserDatabase:             database,
 		RegisterCenter:           client,
 		friendRpcClient:          &friendRpcClient,
 		groupRpcClient:           &groupRpcClient,
-		friendNotificationSender: notification.NewFriendNotificationSender(config, &msgRpcClient, notification.WithDBFunc(database.FindWithError)),
+		friendNotificationSender: notification.NewFriendNotificationSender(&config.Notification, &msgRpcClient, notification.WithDBFunc(database.FindWithError)),
 		userNotificationSender:   notification.NewUserNotificationSender(config, &msgRpcClient, notification.WithUserFunc(database.FindWithError)),
 		config:                   config,
 	}
@@ -110,7 +110,7 @@ func (s *userServer) GetDesignateUsers(ctx context.Context, req *pbuser.GetDesig
 
 func (s *userServer) UpdateUserInfo(ctx context.Context, req *pbuser.UpdateUserInfoReq) (resp *pbuser.UpdateUserInfoResp, err error) {
 	resp = &pbuser.UpdateUserInfoResp{}
-	err = authverify.CheckAccessV3(ctx, req.UserInfo.UserID, s.config)
+	err = authverify.CheckAccessV3(ctx, req.UserInfo.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +144,7 @@ func (s *userServer) UpdateUserInfo(ctx context.Context, req *pbuser.UpdateUserI
 }
 func (s *userServer) UpdateUserInfoEx(ctx context.Context, req *pbuser.UpdateUserInfoExReq) (resp *pbuser.UpdateUserInfoExResp, err error) {
 	resp = &pbuser.UpdateUserInfoExResp{}
-	err = authverify.CheckAccessV3(ctx, req.UserInfo.UserID, s.config)
+	err = authverify.CheckAccessV3(ctx, req.UserInfo.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -194,9 +194,9 @@ func (s *userServer) SetGlobalRecvMessageOpt(ctx context.Context, req *pbuser.Se
 func (s *userServer) AccountCheck(ctx context.Context, req *pbuser.AccountCheckReq) (resp *pbuser.AccountCheckResp, err error) {
 	resp = &pbuser.AccountCheckResp{}
 	if utils.Duplicate(req.CheckUserIDs) {
-		return nil, errs.ErrArgs.Wrap("userID repeated")
+		return nil, errs.ErrArgs.WrapMsg("userID repeated")
 	}
-	err = authverify.CheckAdmin(ctx, s.config)
+	err = authverify.CheckAdmin(ctx, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -241,22 +241,22 @@ func (s *userServer) GetPaginationUsers(ctx context.Context, req *pbuser.GetPagi
 func (s *userServer) UserRegister(ctx context.Context, req *pbuser.UserRegisterReq) (resp *pbuser.UserRegisterResp, err error) {
 	resp = &pbuser.UserRegisterResp{}
 	if len(req.Users) == 0 {
-		return nil, errs.ErrArgs.Wrap("users is empty")
+		return nil, errs.ErrArgs.WrapMsg("users is empty")
 	}
 	if req.Secret != s.config.Secret {
 		log.ZDebug(ctx, "UserRegister", s.config.Secret, req.Secret)
-		return nil, errs.ErrNoPermission.Wrap("secret invalid")
+		return nil, errs.ErrNoPermission.WrapMsg("secret invalid")
 	}
 	if utils.DuplicateAny(req.Users, func(e *sdkws.UserInfo) string { return e.UserID }) {
-		return nil, errs.ErrArgs.Wrap("userID repeated")
+		return nil, errs.ErrArgs.WrapMsg("userID repeated")
 	}
 	userIDs := make([]string, 0)
 	for _, user := range req.Users {
 		if user.UserID == "" {
-			return nil, errs.ErrArgs.Wrap("userID is empty")
+			return nil, errs.ErrArgs.WrapMsg("userID is empty")
 		}
 		if strings.Contains(user.UserID, ":") {
-			return nil, errs.ErrArgs.Wrap("userID contains ':' is invalid userID")
+			return nil, errs.ErrArgs.WrapMsg("userID contains ':' is invalid userID")
 		}
 		userIDs = append(userIDs, user.UserID)
 	}
@@ -265,7 +265,7 @@ func (s *userServer) UserRegister(ctx context.Context, req *pbuser.UserRegisterR
 		return nil, err
 	}
 	if exist {
-		return nil, errs.ErrRegisteredAlready.Wrap("userID registered already")
+		return nil, errs.ErrRegisteredAlready.WrapMsg("userID registered already")
 	}
 	if err := CallbackBeforeUserRegister(ctx, s.config, req); err != nil {
 		return nil, err
@@ -382,7 +382,7 @@ func (s *userServer) GetSubscribeUsersStatus(ctx context.Context,
 
 // ProcessUserCommandAdd user general function add.
 func (s *userServer) ProcessUserCommandAdd(ctx context.Context, req *pbuser.ProcessUserCommandAddReq) (*pbuser.ProcessUserCommandAddResp, error) {
-	err := authverify.CheckAccessV3(ctx, req.UserID, s.config)
+	err := authverify.CheckAccessV3(ctx, req.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +413,7 @@ func (s *userServer) ProcessUserCommandAdd(ctx context.Context, req *pbuser.Proc
 
 // ProcessUserCommandDelete user general function delete.
 func (s *userServer) ProcessUserCommandDelete(ctx context.Context, req *pbuser.ProcessUserCommandDeleteReq) (*pbuser.ProcessUserCommandDeleteResp, error) {
-	err := authverify.CheckAccessV3(ctx, req.UserID, s.config)
+	err := authverify.CheckAccessV3(ctx, req.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +436,7 @@ func (s *userServer) ProcessUserCommandDelete(ctx context.Context, req *pbuser.P
 
 // ProcessUserCommandUpdate user general function update.
 func (s *userServer) ProcessUserCommandUpdate(ctx context.Context, req *pbuser.ProcessUserCommandUpdateReq) (*pbuser.ProcessUserCommandUpdateResp, error) {
-	err := authverify.CheckAccessV3(ctx, req.UserID, s.config)
+	err := authverify.CheckAccessV3(ctx, req.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +468,7 @@ func (s *userServer) ProcessUserCommandUpdate(ctx context.Context, req *pbuser.P
 
 func (s *userServer) ProcessUserCommandGet(ctx context.Context, req *pbuser.ProcessUserCommandGetReq) (*pbuser.ProcessUserCommandGetResp, error) {
 
-	err := authverify.CheckAccessV3(ctx, req.UserID, s.config)
+	err := authverify.CheckAccessV3(ctx, req.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +497,7 @@ func (s *userServer) ProcessUserCommandGet(ctx context.Context, req *pbuser.Proc
 }
 
 func (s *userServer) ProcessUserCommandGetAll(ctx context.Context, req *pbuser.ProcessUserCommandGetAllReq) (*pbuser.ProcessUserCommandGetAllResp, error) {
-	err := authverify.CheckAccessV3(ctx, req.UserID, s.config)
+	err := authverify.CheckAccessV3(ctx, req.UserID, &s.config.Manager, &s.config.IMAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -541,12 +541,12 @@ func (s *userServer) AddNotificationAccount(ctx context.Context, req *pbuser.Add
 			break
 		}
 		if req.UserID == "" {
-			return nil, errs.ErrInternalServer.Wrap("gen user id failed")
+			return nil, errs.ErrInternalServer.WrapMsg("gen user id failed")
 		}
 	} else {
 		_, err := s.UserDatabase.FindWithError(ctx, []string{req.UserID})
 		if err == nil {
-			return nil, errs.ErrArgs.Wrap("userID is used")
+			return nil, errs.ErrArgs.WrapMsg("userID is used")
 		}
 	}
 
@@ -638,7 +638,7 @@ func (s *userServer) SearchNotificationAccount(ctx context.Context, req *pbuser.
 
 func (s *userServer) GetNotificationAccount(ctx context.Context, req *pbuser.GetNotificationAccountReq) (*pbuser.GetNotificationAccountResp, error) {
 	if req.UserID == "" {
-		return nil, errs.ErrArgs.Wrap("userID is empty")
+		return nil, errs.ErrArgs.WrapMsg("userID is empty")
 	}
 	user, err := s.UserDatabase.GetUserByID(ctx, req.UserID)
 	if err != nil {
@@ -648,7 +648,7 @@ func (s *userServer) GetNotificationAccount(ctx context.Context, req *pbuser.Get
 		return &pbuser.GetNotificationAccountResp{}, nil
 	}
 
-	return nil, errs.ErrNoPermission.Wrap("notification messages cannot be sent for this ID")
+	return nil, errs.ErrNoPermission.WrapMsg("notification messages cannot be sent for this ID")
 }
 
 func (s *userServer) genUserID() string {

@@ -18,9 +18,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/utils"
 )
 
 func FriendPb2DB(friend *sdkws.FriendInfo) *relation.FriendModel {
@@ -88,10 +88,7 @@ func FriendsDB2Pb(
 
 }
 
-func FriendRequestDB2Pb(ctx context.Context,
-	friendRequests []*relation.FriendRequestModel,
-	getUsers func(ctx context.Context, userIDs []string) (map[string]*sdkws.UserInfo, error),
-) ([]*sdkws.FriendRequest, error) {
+func FriendRequestDB2Pb(ctx context.Context, friendRequests []*relation.FriendRequestModel, getUsers func(ctx context.Context, userIDs []string) (map[string]*sdkws.UserInfo, error)) ([]*sdkws.FriendRequest, error) {
 	if len(friendRequests) == 0 {
 		return nil, nil
 	}

@@ -20,14 +20,14 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/msgprocessor"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/utils"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 )
@@ -38,11 +38,11 @@ const (
 	conversationUserMinSeq = "CON_USER_MIN_SEQ:"
 	hasReadSeq             = "HAS_READ_SEQ:"
 
-	//appleDeviceToken = "DEVICE_TOKEN".
+	// AppleDeviceToken = "DEVICE_TOKEN".
 	getuiToken  = "GETUI_TOKEN"
 	getuiTaskID = "GETUI_TASK_ID"
-	//signalCache      = "SIGNAL_CACHE:"
-	//signalListCache  = "SIGNAL_LIST_CACHE:".
+	// SignalCache      = "SIGNAL_CACHE:"
+	// signalListCache  = "SIGNAL_LIST_CACHE:".
 	FCM_TOKEN = "FCM_TOKEN:"
 
 	messageCache            = "MESSAGE_CACHE:"
@@ -121,14 +121,15 @@ type MsgModel interface {
 	UnLockMessageTypeKey(ctx context.Context, clientMsgID string, TypeKey string) error
 }
 
-func NewMsgCacheModel(client redis.UniversalClient, config *config.GlobalConfig) MsgModel {
-	return &msgCache{rdb: client, config: config}
+func NewMsgCacheModel(client redis.UniversalClient, msgCacheTimeout int, redisConf *config.Redis) MsgModel {
+	return &msgCache{rdb: client, msgCacheTimeout: msgCacheTimeout, redisConf: redisConf}
 }
 
 type msgCache struct {
 	metaCache
-	rdb    redis.UniversalClient
-	config *config.GlobalConfig
+	rdb             redis.UniversalClient
+	msgCacheTimeout int
+	redisConf       *config.Redis
 }
 
 func (c *msgCache) getMaxSeqKey(conversationID string) string {
@@ -316,7 +317,7 @@ func (c *msgCache) allMessageCacheKey(conversationID string) string {
 }
 
 func (c *msgCache) GetMessagesBySeq(ctx context.Context, conversationID string, seqs []int64) (seqMsgs []*sdkws.MsgData, failedSeqs []int64, err error) {
-	if c.config.Redis.EnablePipeline {
+	if c.redisConf.EnablePipeline {
 		return c.PipeGetMessagesBySeq(ctx, conversationID, seqs)
 	}
 
@@ -333,7 +334,7 @@ func (c *msgCache) PipeGetMessagesBySeq(ctx context.Context, conversationID stri
 
 	_, err = pipe.Exec(ctx)
 	if err != nil && err != redis.Nil {
-		return seqMsgs, failedSeqs, errs.Wrap(err, "pipe.get")
+		return seqMsgs, failedSeqs, errs.WrapMsg(err, "pipe.get")
 	}
 
 	for idx, res := range results {
@@ -417,7 +418,7 @@ func (c *msgCache) ParallelGetMessagesBySeq(ctx context.Context, conversationID 
 }
 
 func (c *msgCache) SetMessageToCache(ctx context.Context, conversationID string, msgs []*sdkws.MsgData) (int, error) {
-	if c.config.Redis.EnablePipeline {
+	if c.redisConf.EnablePipeline {
 		return c.PipeSetMessageToCache(ctx, conversationID, msgs)
 	}
 	return c.ParallelSetMessageToCache(ctx, conversationID, msgs)
@@ -432,7 +433,7 @@ func (c *msgCache) PipeSetMessageToCache(ctx context.Context, conversationID str
 		}
 
 		key := c.getMessageCacheKey(conversationID, msg.Seq)
-		_ = pipe.Set(ctx, key, s, time.Duration(c.config.MsgCacheTimeout)*time.Second)
+		_ = pipe.Set(ctx, key, s, time.Duration(c.msgCacheTimeout)*time.Second)
 	}
 
 	results, err := pipe.Exec(ctx)
@@ -462,7 +463,7 @@ func (c *msgCache) ParallelSetMessageToCache(ctx context.Context, conversationID
 			}
 
 			key := c.getMessageCacheKey(conversationID, msg.Seq)
-			if err := c.rdb.Set(ctx, key, s, time.Duration(c.config.MsgCacheTimeout)*time.Second).Err(); err != nil {
+			if err := c.rdb.Set(ctx, key, s, time.Duration(c.msgCacheTimeout)*time.Second).Err(); err != nil {
 				return errs.Wrap(err)
 			}
 			return nil
@@ -471,7 +472,7 @@ func (c *msgCache) ParallelSetMessageToCache(ctx context.Context, conversationID
 
 	err := wg.Wait()
 	if err != nil {
-		return 0, errs.Wrap(err, "wg.Wait failed")
+		return 0, errs.WrapMsg(err, "wg.Wait failed")
 	}
 
 	return len(msgs), nil
@@ -497,17 +498,17 @@ func (c *msgCache) UserDeleteMsgs(ctx context.Context, conversationID string, se
 		if err != nil {
 			return errs.Wrap(err)
 		}
-		if err := c.rdb.Expire(ctx, delUserListKey, time.Duration(c.config.MsgCacheTimeout)*time.Second).Err(); err != nil {
+		if err := c.rdb.Expire(ctx, delUserListKey, time.Duration(c.msgCacheTimeout)*time.Second).Err(); err != nil {
 			return errs.Wrap(err)
 		}
-		if err := c.rdb.Expire(ctx, userDelListKey, time.Duration(c.config.MsgCacheTimeout)*time.Second).Err(); err != nil {
+		if err := c.rdb.Expire(ctx, userDelListKey, time.Duration(c.msgCacheTimeout)*time.Second).Err(); err != nil {
 			return errs.Wrap(err)
 		}
 	}
 
 	return nil
-	//pipe := c.rdb.Pipeline()
-	//for _, seq := range seqs {
+	// pipe := c.rdb.Pipeline()
+	// for _, seq := range seqs {
 	//	delUserListKey := c.getMessageDelUserListKey(conversationID, seq)
 	//	userDelListKey := c.getUserDelList(conversationID, userID)
 	//	err := pipe.SAdd(ctx, delUserListKey, userID).Err()
@@ -525,8 +526,8 @@ func (c *msgCache) UserDeleteMsgs(ctx context.Context, conversationID string, se
 	//		return errs.Wrap(err)
 	//	}
 	//}
-	//_, err := pipe.Exec(ctx)
-	//return errs.Wrap(err)
+	// _, err := pipe.Exec(ctx)
+	// return errs.Wrap(err)
 }
 
 func (c *msgCache) GetUserDelList(ctx context.Context, userID, conversationID string) (seqs []int64, err error) {
@@ -566,7 +567,7 @@ func (c *msgCache) DelUserDeleteMsgsList(ctx context.Context, conversationID str
 			}
 		}
 	}
-	//for _, seq := range seqs {
+	// for _, seq := range seqs {
 	//	delUsers, err := c.rdb.SMembers(ctx, c.getMessageDelUserListKey(conversationID, seq)).Result()
 	//	if err != nil {
 	//		log.ZWarn(ctx, "DelUserDeleteMsgsList failed", err, "conversationID", conversationID, "seq", seq)
@@ -605,7 +606,7 @@ func (c *msgCache) DelUserDeleteMsgsList(ctx context.Context, conversationID str
 }
 
 func (c *msgCache) DeleteMessages(ctx context.Context, conversationID string, seqs []int64) error {
-	if c.config.Redis.EnablePipeline {
+	if c.redisConf.EnablePipeline {
 		return c.PipeDeleteMessages(ctx, conversationID, seqs)
 	}
 
@@ -638,7 +639,7 @@ func (c *msgCache) PipeDeleteMessages(ctx context.Context, conversationID string
 
 	results, err := pipe.Exec(ctx)
 	if err != nil {
-		return errs.Wrap(err, "pipe.del")
+		return errs.WrapMsg(err, "pipe.del")
 	}
 
 	for _, res := range results {
@@ -687,7 +688,7 @@ func (c *msgCache) DelMsgFromCache(ctx context.Context, userID string, seqs []in
 		if err != nil {
 			return errs.Wrap(err)
 		}
-		if err := c.rdb.Set(ctx, key, s, time.Duration(c.config.MsgCacheTimeout)*time.Second).Err(); err != nil {
+		if err := c.rdb.Set(ctx, key, s, time.Duration(c.msgCacheTimeout)*time.Second).Err(); err != nil {
 			return errs.Wrap(err)
 		}
 	}

@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OpenIMSDK/tools/log"
+	"github.com/openimsdk/tools/log"
 
 	"go.mongodb.org/mongo-driver/bson"
 
@@ -44,7 +44,7 @@ func Test_BatchInsertChat2DB(t *testing.T) {
 	conf.RetainChatRecords = 3650
 	conf.ChatRecordsClearTime = "0 2 * * 3"
 
-	mongo, err := unrelation.NewMongo(conf)
+	mongo, err := unrelation.NewMongoDB(context.Background(), &conf.Mongo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +156,7 @@ func GetDB() *commonMsgDatabase {
 	conf.RetainChatRecords = 3650
 	conf.ChatRecordsClearTime = "0 2 * * 3"
 
-	mongo, err := unrelation.NewMongo(conf)
+	mongo, err := unrelation.NewMongoDB(context.Background(), &conf.Mongo)
 	if err != nil {
 		panic(err)
 	}
@@ -205,7 +205,7 @@ func Test_Revoke(t *testing.T) {
 }
 
 func Test_FindBySeq(t *testing.T) {
-	if err := log.InitFromConfig("", "", 6, true, false, "", 2, 1); err != nil {
+	if err := log.InitFromConfig("", "", 6, true, false, "", 2, 1, "1,0"); err != nil {
 		t.Fatal(err)
 	}
 	db := GetDB()

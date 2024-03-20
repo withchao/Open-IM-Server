@@ -20,14 +20,6 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/conversation"
-	"github.com/OpenIMSDK/protocol/msggateway"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/internal/push/offlinepush"
 	"github.com/openimsdk/open-im-server/v3/internal/push/offlinepush/dummy"
 	"github.com/openimsdk/open-im-server/v3/internal/push/offlinepush/fcm"
@@ -40,6 +32,14 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/msgprocessor"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpccache"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/conversation"
+	"github.com/openimsdk/protocol/msggateway"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/utils"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 )
@@ -75,19 +75,19 @@ func NewPusher(config *config.GlobalConfig, discov discoveryregistry.SvcDiscover
 	}
 }
 
-func NewOfflinePusher(config *config.GlobalConfig, cache cache.MsgModel) offlinepush.OfflinePusher {
+func NewOfflinePusher(pushConf *config.Push, iOSPushConf *config.IOSPush, cache cache.MsgModel) (offlinepush.OfflinePusher, error) {
 	var offlinePusher offlinepush.OfflinePusher
-	switch config.Push.Enable {
+	switch pushConf.Enable {
 	case "getui":
-		offlinePusher = getui.NewClient(config, cache)
+		offlinePusher = getui.NewClient(pushConf, cache)
 	case "fcm":
-		offlinePusher = fcm.NewClient(config, cache)
+		return fcm.NewClient(pushConf, cache)
 	case "jpush":
-		offlinePusher = jpush.NewClient(config)
+		offlinePusher = jpush.NewClient(pushConf, iOSPushConf)
 	default:
 		offlinePusher = dummy.NewClient()
 	}
-	return offlinePusher
+	return offlinePusher, nil
 }
 
 func (p *Pusher) DeleteMemberAndSetConversationSeq(ctx context.Context, groupID string, userIDs []string) error {
@@ -101,7 +101,7 @@ func (p *Pusher) DeleteMemberAndSetConversationSeq(ctx context.Context, groupID 
 
 func (p *Pusher) Push2User(ctx context.Context, userIDs []string, msg *sdkws.MsgData) error {
 	log.ZDebug(ctx, "Get msg from msg_transfer And push msg", "userIDs", userIDs, "msg", msg.String())
-	if err := callbackOnlinePush(ctx, p.config, userIDs, msg); err != nil {
+	if err := callbackOnlinePush(ctx, &p.config.Callback, userIDs, msg); err != nil {
 		return err
 	}
 	// push
@@ -129,7 +129,7 @@ func (p *Pusher) Push2User(ctx context.Context, userIDs []string, msg *sdkws.Msg
 	})
 
 	if len(offlinePushUserIDList) > 0 {
-		if err = callbackOfflinePush(ctx, p.config, offlinePushUserIDList, msg, &[]string{}); err != nil {
+		if err = callbackOfflinePush(ctx, &p.config.Callback, offlinePushUserIDList, msg, &[]string{}); err != nil {
 			return err
 		}
 		err = p.offlinePushMsg(ctx, msg.SendID, msg, offlinePushUserIDList)
@@ -162,7 +162,7 @@ func (p *Pusher) k8sOfflinePush2SuperGroup(ctx context.Context, groupID string, 
 	}
 	if len(needOfflinePushUserIDs) > 0 {
 		var offlinePushUserIDs []string
-		err := callbackOfflinePush(ctx, p.config, needOfflinePushUserIDs, msg, &offlinePushUserIDs)
+		err := callbackOfflinePush(ctx, &p.config.Callback, needOfflinePushUserIDs, msg, &offlinePushUserIDs)
 		if err != nil {
 			return err
 		}
@@ -193,7 +193,7 @@ func (p *Pusher) k8sOfflinePush2SuperGroup(ctx context.Context, groupID string, 
 func (p *Pusher) Push2SuperGroup(ctx context.Context, groupID string, msg *sdkws.MsgData) (err error) {
 	log.ZDebug(ctx, "Get super group msg from msg_transfer and push msg", "msg", msg.String(), "groupID", groupID)
 	var pushToUserIDs []string
-	if err = callbackBeforeSuperGroupOnlinePush(ctx, p.config, groupID, msg, &pushToUserIDs); err != nil {
+	if err = callbackBeforeSuperGroupOnlinePush(ctx, &p.config.Callback, groupID, msg, &pushToUserIDs); err != nil {
 		return err
 	}
 
@@ -298,7 +298,7 @@ func (p *Pusher) Push2SuperGroup(ctx context.Context, groupID string, msg *sdkws
 		// Use offline push messaging
 		if len(needOfflinePushUserIDs) > 0 {
 			var offlinePushUserIDs []string
-			err = callbackOfflinePush(ctx, p.config, needOfflinePushUserIDs, msg, &offlinePushUserIDs)
+			err = callbackOfflinePush(ctx, &p.config.Callback, needOfflinePushUserIDs, msg, &offlinePushUserIDs)
 			if err != nil {
 				return err
 			}
@@ -504,7 +504,7 @@ func (p *Pusher) getOfflinePushInfos(conversationID string, msg *sdkws.MsgData) 
 		case constant.AtText:
 			ac := atContent{}
 			_ = utils.JsonStringToStruct(string(msg.Content), &ac)
-			if utils.IsContain(conversationID, ac.AtUserList) {
+			if utils.Contain(conversationID, ac.AtUserList...) {
 				title = constant.ContentType2PushContent[constant.AtText] + constant.ContentType2PushContent[constant.Common]
 			} else {
 				title = constant.ContentType2PushContent[constant.GroupMsg]

@@ -18,29 +18,23 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	pbgroup "github.com/OpenIMSDK/protocol/group"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/controller"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
+	"github.com/openimsdk/protocol/constant"
+	pbgroup "github.com/openimsdk/protocol/group"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/utils"
 )
 
-func NewGroupNotificationSender(
-	db controller.GroupDatabase,
-	msgRpcClient *rpcclient.MessageRpcClient,
-	userRpcClient *rpcclient.UserRpcClient,
-	config *config.GlobalConfig,
-	fn func(ctx context.Context, userIDs []string) ([]CommonUser, error),
-) *GroupNotificationSender {
+func NewGroupNotificationSender(db controller.GroupDatabase, msgRpcClient *rpcclient.MessageRpcClient, userRpcClient *rpcclient.UserRpcClient, config *config.GlobalConfig, fn func(ctx context.Context, userIDs []string) ([]CommonUser, error)) *GroupNotificationSender {
 	return &GroupNotificationSender{
-		NotificationSender: rpcclient.NewNotificationSender(config, rpcclient.WithRpcClient(msgRpcClient), rpcclient.WithUserRpcClient(userRpcClient)),
+		NotificationSender: rpcclient.NewNotificationSender(&config.Notification, rpcclient.WithRpcClient(msgRpcClient), rpcclient.WithUserRpcClient(userRpcClient)),
 		getUsersInfo:       fn,
 		db:                 db,
 		config:             config,
@@ -95,7 +89,7 @@ func (g *GroupNotificationSender) getUser(ctx context.Context, userID string) (*
 		return nil, err
 	}
 	if len(users) == 0 {
-		return nil, errs.ErrUserIDNotFound.Wrap(fmt.Sprintf("user %s not found", userID))
+		return nil, errs.ErrUserIDNotFound.WrapMsg(fmt.Sprintf("user %s not found", userID))
 	}
 	return &sdkws.PublicUserInfo{
 		UserID:   users[0].GetUserID(),
@@ -177,7 +171,7 @@ func (g *GroupNotificationSender) getGroupMember(ctx context.Context, groupID st
 		return nil, err
 	}
 	if len(members) == 0 {
-		return nil, errs.ErrInternalServer.Wrap(fmt.Sprintf("group %s member %s not found", groupID, userID))
+		return nil, errs.ErrInternalServer.WrapMsg(fmt.Sprintf("group %s member %s not found", groupID, userID))
 	}
 	return members[0], nil
 }
@@ -248,11 +242,11 @@ func (g *GroupNotificationSender) groupMemberDB2PB(member *relation.GroupMemberM
 
 func (g *GroupNotificationSender) fillOpUser(ctx context.Context, opUser **sdkws.GroupMemberFullInfo, groupID string) (err error) {
 	if opUser == nil {
-		return errs.ErrInternalServer.Wrap("**sdkws.GroupMemberFullInfo is nil")
+		return errs.ErrInternalServer.WrapMsg("**sdkws.GroupMemberFullInfo is nil")
 	}
 	userID := mcontext.GetOpUserID(ctx)
 	if groupID != "" {
-		if authverify.IsManagerUserID(userID, g.config) {
+		if authverify.IsManagerUserID(userID, &g.config.Manager, &g.config.IMAdmin) {
 			*opUser = &sdkws.GroupMemberFullInfo{
 				GroupID:        groupID,
 				UserID:         userID,

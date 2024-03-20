@@ -16,7 +16,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/go-playground/validator/v10"
+	"github.com/redis/go-redis/v9"
 	"net"
 	"net/http"
 	"os"
@@ -25,16 +28,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/tools/apiresp"
-	"github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mw"
-	"github.com/OpenIMSDK/tools/tokenverify"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
-	"github.com/go-playground/validator/v10"
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
@@ -44,17 +39,25 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/prommetrics"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
 	util "github.com/openimsdk/open-im-server/v3/pkg/util/genutil"
-	"github.com/redis/go-redis/v9"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/tools/apiresp"
+	"github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mw"
+	"github.com/openimsdk/tools/tokenverify"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-func Start(config *config.GlobalConfig, port int, proPort int) error {
+func Start(ctx context.Context, config *config.GlobalConfig, port int, proPort int) error {
 	if port == 0 || proPort == 0 {
-		err := "port or proPort is empty:" + strconv.Itoa(port) + "," + strconv.Itoa(proPort)
-		return errs.Wrap(fmt.Errorf(err))
+		err := errors.New("port or proPort is empty")
+		wrappedErr := errs.WrapMsg(err, "validation error", "port", port, "proPort", proPort)
+		return wrappedErr
 	}
-	rdb, err := cache.NewRedis(config)
+
+	rdb, err := cache.NewRedis(ctx, &config.Redis)
 	if err != nil {
 		return err
 	}
@@ -64,27 +67,29 @@ func Start(config *config.GlobalConfig, port int, proPort int) error {
 	// Determine whether zk is passed according to whether it is a clustered deployment
 	client, err = kdisc.NewDiscoveryRegister(config)
 	if err != nil {
-		return errs.Wrap(err, "register discovery err")
+		return errs.WrapMsg(err, "failed to register discovery service")
 	}
 
 	if err = client.CreateRpcRootNodes(config.GetServiceNames()); err != nil {
-		return errs.Wrap(err, "create rpc root nodes error")
+		return errs.WrapMsg(err, "failed to create RPC root nodes")
 	}
 
 	if err = client.RegisterConf2Registry(constant.OpenIMCommonConfigKey, config.EncodeConfig()); err != nil {
-		return errs.Wrap(err)
+		return errs.WrapMsg(err, "failed to register configuration to registry")
 	}
+
 	var (
 		netDone = make(chan struct{}, 1)
 		netErr  error
 	)
+
 	router := newGinRouter(client, rdb, config)
 	if config.Prometheus.Enable {
 		go func() {
 			p := ginprom.NewPrometheus("app", prommetrics.GetGinCusMetrics("Api"))
 			p.SetListenAddress(fmt.Sprintf(":%d", proPort))
 			if err = p.Use(router); err != nil && err != http.ErrServerClosed {
-				netErr = errs.Wrap(err, fmt.Sprintf("prometheus start err: %d", proPort))
+				netErr = errs.WrapMsg(err, fmt.Sprintf("prometheus start err: %d", proPort))
 				netDone <- struct{}{}
 			}
 		}()
@@ -99,11 +104,12 @@ func Start(config *config.GlobalConfig, port int, proPort int) error {
 	}
 
 	server := http.Server{Addr: address, Handler: router}
-
+	log.CInfo(ctx, "API server is initializing", "address", address, "apiPort", port,
+		"prometheusPort", proPort)
 	go func() {
 		err = server.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			netErr = errs.Wrap(err, fmt.Sprintf("api start err: %s", server.Addr))
+			netErr = errs.WrapMsg(err, fmt.Sprintf("api start err: %s", server.Addr))
 			netDone <- struct{}{}
 
 		}
@@ -119,7 +125,7 @@ func Start(config *config.GlobalConfig, port int, proPort int) error {
 		util.SIGTERMExit()
 		err := server.Shutdown(ctx)
 		if err != nil {
-			return errs.Wrap(err, "shutdown err")
+			return errs.WrapMsg(err, "shutdown err")
 		}
 	case <-netDone:
 		close(netDone)
@@ -137,16 +143,17 @@ func newGinRouter(disCov discoveryregistry.SvcDiscoveryRegistry, rdb redis.Unive
 	}
 	r.Use(gin.Recovery(), mw.CorsHandler(), mw.GinParseOperationID())
 	// init rpc client here
-	userRpc := rpcclient.NewUser(disCov, config)
-	groupRpc := rpcclient.NewGroup(disCov, config)
-	friendRpc := rpcclient.NewFriend(disCov, config)
-	messageRpc := rpcclient.NewMessage(disCov, config)
-	conversationRpc := rpcclient.NewConversation(disCov, config)
-	authRpc := rpcclient.NewAuth(disCov, config)
-	thirdRpc := rpcclient.NewThird(disCov, config)
+	userRpc := rpcclient.NewUser(disCov, config.RpcRegisterName.OpenImUserName, config.RpcRegisterName.OpenImMessageGatewayName,
+		&config.Manager, &config.IMAdmin)
+	groupRpc := rpcclient.NewGroup(disCov, config.RpcRegisterName.OpenImGroupName)
+	friendRpc := rpcclient.NewFriend(disCov, config.RpcRegisterName.OpenImFriendName)
+	messageRpc := rpcclient.NewMessage(disCov, config.RpcRegisterName.OpenImMsgName)
+	conversationRpc := rpcclient.NewConversation(disCov, config.RpcRegisterName.OpenImConversationName)
+	authRpc := rpcclient.NewAuth(disCov, config.RpcRegisterName.OpenImAuthName)
+	thirdRpc := rpcclient.NewThird(disCov, config.RpcRegisterName.OpenImThirdName, config.Prometheus.GrafanaUrl)
 
 	u := NewUserApi(*userRpc)
-	m := NewMessageApi(messageRpc, userRpc)
+	m := NewMessageApi(messageRpc, userRpc, &config.Manager, &config.IMAdmin)
 	ParseToken := GinParseToken(rdb, config)
 	userRouterGroup := r.Group("/user")
 	{
@@ -311,18 +318,17 @@ func newGinRouter(disCov discoveryregistry.SvcDiscoveryRegistry, rdb redis.Unive
 
 func GinParseToken(rdb redis.UniversalClient, config *config.GlobalConfig) gin.HandlerFunc {
 	dataBase := controller.NewAuthDatabase(
-		cache.NewMsgCacheModel(rdb, config),
+		cache.NewMsgCacheModel(rdb, config.MsgCacheTimeout, &config.Redis),
 		config.Secret,
 		config.TokenPolicy.Expire,
-		config,
 	)
 	return func(c *gin.Context) {
 		switch c.Request.Method {
 		case http.MethodPost:
 			token := c.Request.Header.Get(constant.Token)
 			if token == "" {
-				log.ZWarn(c, "header get token error", errs.ErrArgs.Wrap("header must have token"))
-				apiresp.GinError(c, errs.ErrArgs.Wrap("header must have token"))
+				log.ZWarn(c, "header get token error", errs.ErrArgs.WrapMsg("header must have token"))
+				apiresp.GinError(c, errs.ErrArgs.WrapMsg("header must have token"))
 				c.Abort()
 				return
 			}

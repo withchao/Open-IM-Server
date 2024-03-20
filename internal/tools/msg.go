@@ -17,16 +17,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"math"
-	"math/rand"
-
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/mw"
-	"github.com/OpenIMSDK/tools/tx"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/controller"
@@ -35,9 +25,18 @@ import (
 	kdisc "github.com/openimsdk/open-im-server/v3/pkg/common/discoveryregister"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient/notification"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/mw"
+	"github.com/openimsdk/tools/tx"
+	"github.com/openimsdk/tools/utils"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"math"
+	"math/rand"
 )
 
 type MsgTool struct {
@@ -63,12 +62,12 @@ func NewMsgTool(msgDatabase controller.CommonMsgDatabase, userDatabase controlle
 	}
 }
 
-func InitMsgTool(config *config.GlobalConfig) (*MsgTool, error) {
-	rdb, err := cache.NewRedis(config)
+func InitMsgTool(ctx context.Context, config *config.GlobalConfig) (*MsgTool, error) {
+	rdb, err := cache.NewRedis(ctx, &config.Redis)
 	if err != nil {
 		return nil, err
 	}
-	mongo, err := unrelation.NewMongo(config)
+	mongo, err := unrelation.NewMongoDB(ctx, &config.Mongo)
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +114,13 @@ func InitMsgTool(config *config.GlobalConfig) (*MsgTool, error) {
 		cache.NewConversationRedis(rdb, cache.GetDefaultOpt(), conversationDB),
 		ctxTx,
 	)
-	msgRpcClient := rpcclient.NewMessageRpcClient(discov, config)
+	msgRpcClient := rpcclient.NewMessageRpcClient(discov, config.RpcRegisterName.OpenImMsgName)
 	msgNotificationSender := notification.NewMsgNotificationSender(config, rpcclient.WithRpcClient(&msgRpcClient))
 	msgTool := NewMsgTool(msgDatabase, userDatabase, groupDatabase, conversationDatabase, msgNotificationSender, config)
 	return msgTool, nil
 }
 
-//func (c *MsgTool) AllConversationClearMsgAndFixSeq() {
+// func (c *MsgTool) AllConversationClearMsgAndFixSeq() {
 //	ctx := mcontext.NewCtx(utils.GetSelfFuncName())
 //	log.ZInfo(ctx, "============================ start del cron task ============================")
 //	conversationIDs, err := c.conversationDatabase.GetAllConversationIDs(ctx)

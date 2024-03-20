@@ -17,9 +17,9 @@ package msg
 import (
 	"context"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	pbmsg "github.com/OpenIMSDK/protocol/msg"
-	"github.com/OpenIMSDK/tools/mcontext"
+	"github.com/openimsdk/protocol/constant"
+	pbmsg "github.com/openimsdk/protocol/msg"
+	"github.com/openimsdk/tools/mcontext"
 )
 
 func (m *msgServer) SetSendMsgStatus(

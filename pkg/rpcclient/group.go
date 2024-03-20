@@ -18,35 +18,33 @@ import (
 	"context"
 	"strings"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/group"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/discoveryregistry"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/utils"
-	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	util "github.com/openimsdk/open-im-server/v3/pkg/util/genutil"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/group"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/discoveryregistry"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/utils"
 )
 
 type Group struct {
 	Client group.GroupClient
 	discov discoveryregistry.SvcDiscoveryRegistry
-	Config *config.GlobalConfig
 }
 
-func NewGroup(discov discoveryregistry.SvcDiscoveryRegistry, config *config.GlobalConfig) *Group {
-	conn, err := discov.GetConn(context.Background(), config.RpcRegisterName.OpenImGroupName)
+func NewGroup(discov discoveryregistry.SvcDiscoveryRegistry, rpcRegisterName string) *Group {
+	conn, err := discov.GetConn(context.Background(), rpcRegisterName)
 	if err != nil {
 		util.ExitWithError(err)
 	}
 	client := group.NewGroupClient(conn)
-	return &Group{discov: discov, Client: client, Config: config}
+	return &Group{discov: discov, Client: client}
 }
 
 type GroupRpcClient Group
 
-func NewGroupRpcClient(discov discoveryregistry.SvcDiscoveryRegistry, config *config.GlobalConfig) GroupRpcClient {
-	return GroupRpcClient(*NewGroup(discov, config))
+func NewGroupRpcClient(discov discoveryregistry.SvcDiscoveryRegistry, rpcRegisterName string) GroupRpcClient {
+	return GroupRpcClient(*NewGroup(discov, rpcRegisterName))
 }
 
 func (g *GroupRpcClient) GetGroupInfos(ctx context.Context, groupIDs []string, complete bool) ([]*sdkws.GroupInfo, error) {
@@ -60,7 +58,7 @@ func (g *GroupRpcClient) GetGroupInfos(ctx context.Context, groupIDs []string, c
 		if ids := utils.Single(groupIDs, utils.Slice(resp.GroupInfos, func(e *sdkws.GroupInfo) string {
 			return e.GroupID
 		})); len(ids) > 0 {
-			return nil, errs.ErrGroupIDNotFound.Wrap(strings.Join(ids, ","))
+			return nil, errs.ErrGroupIDNotFound.WrapMsg(strings.Join(ids, ","))
 		}
 	}
 	return resp.GroupInfos, nil
@@ -105,7 +103,7 @@ func (g *GroupRpcClient) GetGroupMemberInfos(
 		if ids := utils.Single(userIDs, utils.Slice(resp.Members, func(e *sdkws.GroupMemberFullInfo) string {
 			return e.UserID
 		})); len(ids) > 0 {
-			return nil, errs.ErrNotInGroupYet.Wrap(strings.Join(ids, ","))
+			return nil, errs.ErrNotInGroupYet.WrapMsg(strings.Join(ids, ","))
 		}
 	}
 	return resp.Members, nil

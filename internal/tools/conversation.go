@@ -19,14 +19,14 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/utils"
 )
 
-//func (c *MsgTool) ConversationsDestructMsgs() {
+// func (c *MsgTool) ConversationsDestructMsgs() {
 //	log.ZInfo(context.Background(), "start msg destruct cron task")
 //	ctx := mcontext.NewCtx(utils.GetSelfFuncName())
 //	conversations, err := c.conversationDatabase.GetConversationIDsNeedDestruct(ctx)

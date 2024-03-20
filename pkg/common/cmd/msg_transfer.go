@@ -15,19 +15,24 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
+	config2 "github.com/openimsdk/open-im-server/v3/pkg/common/config"
 
-	"github.com/OpenIMSDK/protocol/constant"
 	"github.com/openimsdk/open-im-server/v3/internal/msgtransfer"
+	"github.com/openimsdk/open-im-server/v3/pkg/util/genutil"
+	"github.com/openimsdk/protocol/constant"
 	"github.com/spf13/cobra"
 )
 
 type MsgTransferCmd struct {
 	*RootCmd
+	ctx context.Context
 }
 
-func NewMsgTransferCmd() *MsgTransferCmd {
-	ret := &MsgTransferCmd{NewRootCmd("msgTransfer")}
+func NewMsgTransferCmd(name string) *MsgTransferCmd {
+	ret := &MsgTransferCmd{RootCmd: NewRootCmd(genutil.GetProcessName(), name)}
+	ret.ctx = context.WithValue(context.Background(), "version", config2.Version)
 	ret.addRunE()
 	ret.SetRootCmdPt(ret)
 	return ret
@@ -35,7 +40,7 @@ func NewMsgTransferCmd() *MsgTransferCmd {
 
 func (m *MsgTransferCmd) addRunE() {
 	m.Command.RunE = func(cmd *cobra.Command, args []string) error {
-		return msgtransfer.StartTransfer(m.config, m.getPrometheusPortFlag(cmd))
+		return msgtransfer.Start(m.ctx, m.config, m.getPrometheusPortFlag(cmd), m.getTransferProgressFlagValue())
 	}
 }
 

@@ -15,15 +15,6 @@
 package api
 
 import (
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/protocol/msg"
-	"github.com/OpenIMSDK/protocol/sdkws"
-	"github.com/OpenIMSDK/tools/a2r"
-	"github.com/OpenIMSDK/tools/apiresp"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/utils"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
 	"github.com/mitchellh/mapstructure"
@@ -31,16 +22,30 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/rpcclient"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/msg"
+	"github.com/openimsdk/protocol/sdkws"
+	"github.com/openimsdk/tools/a2r"
+	"github.com/openimsdk/tools/apiresp"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/utils"
 )
 
 type MessageApi struct {
 	*rpcclient.Message
 	validate      *validator.Validate
 	userRpcClient *rpcclient.UserRpcClient
+	manager       *config.Manager
+	imAdmin       *config.IMAdmin
 }
 
-func NewMessageApi(msgRpcClient *rpcclient.Message, userRpcClient *rpcclient.User) MessageApi {
-	return MessageApi{Message: msgRpcClient, validate: validator.New(), userRpcClient: rpcclient.NewUserRpcClientByUser(userRpcClient)}
+func NewMessageApi(msgRpcClient *rpcclient.Message, userRpcClient *rpcclient.User, manager *config.Manager,
+	imAdmin *config.IMAdmin) MessageApi {
+	return MessageApi{Message: msgRpcClient, validate: validator.New(),
+		userRpcClient: rpcclient.NewUserRpcClientByUser(userRpcClient),
+		manager:       manager, imAdmin: imAdmin}
 }
 
 func (MessageApi) SetOptions(options map[string]bool, value bool) {
@@ -173,14 +178,14 @@ func (m *MessageApi) getSendMsgReq(c *gin.Context, req apistruct.SendMsg) (sendM
 			return nil, err
 		}
 	default:
-		return nil, errs.ErrArgs.WithDetail("not support err contentType")
+		return nil, errs.WrapMsg(errs.ErrArgs, "unsupported content type", "contentType", req.ContentType)
 	}
 	if err := mapstructure.WeakDecode(req.Content, &data); err != nil {
-		return nil, err
+		return nil, errs.WrapMsg(err, "failed to decode message content")
 	}
-	log.ZDebug(c, "getSendMsgReq", "req", req.Content)
+	log.ZDebug(c, "getSendMsgReq", "decodedContent", data)
 	if err := m.validate.Struct(data); err != nil {
-		return nil, err
+		return nil, errs.WrapMsg(err, "validation error")
 	}
 	return m.newUserSendMsgReq(c, &req), nil
 }
@@ -198,9 +203,9 @@ func (m *MessageApi) SendMessage(c *gin.Context) {
 	}
 
 	// Check if the user has the app manager role.
-	if !authverify.IsAppManagerUid(c, m.Config) {
+	if !authverify.IsAppManagerUid(c, m.manager, m.imAdmin) {
 		// Respond with a permission error if the user is not an app manager.
-		apiresp.GinError(c, errs.ErrNoPermission.Wrap("only app manager can send message"))
+		apiresp.GinError(c, errs.ErrNoPermission.WrapMsg("only app manager can send message"))
 		return
 	}
 
@@ -253,8 +258,8 @@ func (m *MessageApi) SendBusinessNotification(c *gin.Context) {
 		return
 	}
 
-	if !authverify.IsAppManagerUid(c, m.Config) {
-		apiresp.GinError(c, errs.ErrNoPermission.Wrap("only app manager can send message"))
+	if !authverify.IsAppManagerUid(c, m.manager, m.imAdmin) {
+		apiresp.GinError(c, errs.ErrNoPermission.WrapMsg("only app manager can send message"))
 		return
 	}
 	sendMsgReq := msg.SendMsgReq{
@@ -297,8 +302,8 @@ func (m *MessageApi) BatchSendMsg(c *gin.Context) {
 		return
 	}
 	log.ZInfo(c, "BatchSendMsg", "req", req)
-	if err := authverify.CheckAdmin(c, m.Config); err != nil {
-		apiresp.GinError(c, errs.ErrNoPermission.Wrap("only app manager can send message"))
+	if err := authverify.CheckAdmin(c, m.manager, m.imAdmin); err != nil {
+		apiresp.GinError(c, errs.ErrNoPermission.WrapMsg("only app manager can send message"))
 		return
 	}
 

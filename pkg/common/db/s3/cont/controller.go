@@ -24,11 +24,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
 	"github.com/google/uuid"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/s3"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
 )
 
 func New(cache cache.S3Cache, impl s3.Interface) *Controller {
@@ -220,7 +220,7 @@ func (c *Controller) CompleteUpload(ctx context.Context, uploadID string, partHa
 		}
 		md5Sum := md5.Sum([]byte(strings.Join([]string{uploadInfo.ETag}, partSeparator)))
 		if md5val := hex.EncodeToString(md5Sum[:]); md5val != upload.Hash {
-			return nil, errs.ErrArgs.Wrap(fmt.Sprintf("md5 mismatching %s != %s", md5val, upload.Hash))
+			return nil, errs.ErrArgs.WrapMsg(fmt.Sprintf("md5 mismatching %s != %s", md5val, upload.Hash))
 		}
 		// Prevents concurrent operations at this time that cause files to be overwritten
 		copyInfo, err := c.impl.CopyObject(ctx, uploadInfo.Key, upload.Key+"."+c.UUID())

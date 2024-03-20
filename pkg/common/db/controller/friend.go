@@ -19,13 +19,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/OpenIMSDK/protocol/constant"
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/log"
-	"github.com/OpenIMSDK/tools/mcontext"
-	"github.com/OpenIMSDK/tools/pagination"
-	"github.com/OpenIMSDK/tools/tx"
-	"github.com/OpenIMSDK/tools/utils"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/log"
+	"github.com/openimsdk/tools/mcontext"
+	"github.com/openimsdk/tools/pagination"
+	"github.com/openimsdk/tools/tx"
+	"github.com/openimsdk/tools/utils"
+
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 )
@@ -219,7 +220,7 @@ func (f *friendDatabase) AgreeFriendRequest(ctx context.Context, friendRequest *
 			return err
 		}
 		if fr.HandleResult != 0 {
-			return errs.ErrArgs.Wrap("the friend request has been processed")
+			return errs.ErrArgs.WrapMsg("the friend request has been processed")
 		}
 		friendRequest.HandlerUserID = mcontext.GetOpUserID(ctx)
 		friendRequest.HandleResult = constant.FriendResponseAgree

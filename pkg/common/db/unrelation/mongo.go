@@ -17,14 +17,15 @@ package unrelation
 import (
 	"context"
 	"fmt"
+	"github.com/openimsdk/tools/log"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/OpenIMSDK/tools/errs"
-	"github.com/OpenIMSDK/tools/mw/specialerror"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/unrelation"
+	"github.com/openimsdk/tools/errs"
+	"github.com/openimsdk/tools/mw/specialerror"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -36,45 +37,46 @@ const (
 )
 
 type Mongo struct {
-	db     *mongo.Client
-	config *config.GlobalConfig
+	db        *mongo.Client
+	mongoConf *config.Mongo
 }
 
-// NewMongo Initialize MongoDB connection.
-func NewMongo(config *config.GlobalConfig) (*Mongo, error) {
+// NewMongoDB Initialize MongoDB connection.
+func NewMongoDB(ctx context.Context, mongoConf *config.Mongo) (*Mongo, error) {
 	specialerror.AddReplace(mongo.ErrNoDocuments, errs.ErrRecordNotFound)
-	uri := buildMongoURI(config)
+	uri := buildMongoURI(mongoConf)
 
 	var mongoClient *mongo.Client
 	var err error
 
 	// Retry connecting to MongoDB
 	for i := 0; i <= maxRetry; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), mongoConnTimeout)
+		ctx, cancel := context.WithTimeout(ctx, mongoConnTimeout)
 		defer cancel()
 		mongoClient, err = mongo.Connect(ctx, options.Client().ApplyURI(uri))
 		if err == nil {
 			if err = mongoClient.Ping(ctx, nil); err != nil {
-				return nil, errs.Wrap(err, uri)
+				return nil, errs.WrapMsg(err, uri)
 			}
-			return &Mongo{db: mongoClient, config: config}, nil
+			log.CInfo(ctx, "MONGODB connected successfully", "uri", uri)
+			return &Mongo{db: mongoClient, mongoConf: mongoConf}, nil
 		}
 		if shouldRetry(err) {
 			time.Sleep(time.Second) // exponential backoff could be implemented here
 			continue
 		}
 	}
-	return nil, errs.Wrap(err, uri)
+	return nil, errs.WrapMsg(err, uri)
 }
 
-func buildMongoURI(config *config.GlobalConfig) string {
+func buildMongoURI(mongoConf *config.Mongo) string {
 	uri := os.Getenv("MONGO_URI")
 	if uri != "" {
 		return uri
 	}
 
-	if config.Mongo.Uri != "" {
-		return config.Mongo.Uri
+	if mongoConf.Uri != "" {
+		return mongoConf.Uri
 	}
 
 	username := os.Getenv("MONGO_OPENIM_USERNAME")
@@ -85,21 +87,21 @@ func buildMongoURI(config *config.GlobalConfig) string {
 	maxPoolSize := os.Getenv("MONGO_MAX_POOL_SIZE")
 
 	if username == "" {
-		username = config.Mongo.Username
+		username = mongoConf.Username
 	}
 	if password == "" {
-		password = config.Mongo.Password
+		password = mongoConf.Password
 	}
 	if address == "" {
-		address = strings.Join(config.Mongo.Address, ",")
+		address = strings.Join(mongoConf.Address, ",")
 	} else if port != "" {
 		address = fmt.Sprintf("%s:%s", address, port)
 	}
 	if database == "" {
-		database = config.Mongo.Database
+		database = mongoConf.Database
 	}
 	if maxPoolSize == "" {
-		maxPoolSize = fmt.Sprint(config.Mongo.MaxPoolSize)
+		maxPoolSize = fmt.Sprint(mongoConf.MaxPoolSize)
 	}
 
 	if username != "" && password != "" {
@@ -133,7 +135,7 @@ func (m *Mongo) CreateMsgIndex() error {
 
 // createMongoIndex creates an index in a MongoDB collection.
 func (m *Mongo) createMongoIndex(collection string, isUnique bool, keys ...string) error {
-	db := m.GetDatabase(m.config.Mongo.Database).Collection(collection)
+	db := m.GetDatabase(m.mongoConf.Database).Collection(collection)
 	opts := options.CreateIndexes().SetMaxTime(10 * time.Second)
 	indexView := db.Indexes()
 
@@ -148,7 +150,7 @@ func (m *Mongo) createMongoIndex(collection string, isUnique bool, keys ...strin
 
 	_, err := indexView.CreateOne(context.Background(), index, opts)
 	if err != nil {
-		return errs.Wrap(err, "CreateIndex")
+		return errs.WrapMsg(err, "CreateIndex")
 	}
 	return nil
 }
