@@ -318,7 +318,7 @@ func newGinRouter(disCov discoveryregistry.SvcDiscoveryRegistry, rdb redis.Unive
 
 func GinParseToken(rdb redis.UniversalClient, config *config.GlobalConfig) gin.HandlerFunc {
 	dataBase := controller.NewAuthDatabase(
-		cache.NewMsgCacheModel(rdb, config.MsgCacheTimeout, &config.Redis),
+		cache.NewTokenCacheModel(rdb),
 		config.Secret,
 		config.TokenPolicy.Expire,
 	)
