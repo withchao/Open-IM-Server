@@ -134,3 +134,7 @@ func (o *GroupApi) GetGroups(c *gin.Context) {
 func (o *GroupApi) GetGroupMemberUserIDs(c *gin.Context) {
 	a2r.Call(group.GroupClient.GetGroupMemberUserIDs, o.Client, c)
 }
+
+func (o *GroupApi) SearchGroupMember(c *gin.Context) {
+	a2r.Call(group.GroupClient.SearchGroupMember, o.Client, c)
+}

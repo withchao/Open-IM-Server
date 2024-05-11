@@ -87,8 +87,13 @@ func (g *GroupMemberMgo) FindRoleLevelUserIDs(ctx context.Context, groupID strin
 	return mongoutil.Find[string](ctx, g.coll, bson.M{"group_id": groupID, "role_level": roleLevel}, options.Find().SetProjection(bson.M{"_id": 0, "user_id": 1}))
 }
 
-func (g *GroupMemberMgo) SearchMember(ctx context.Context, keyword string, groupID string, pagination pagination.Pagination) (total int64, groupList []*relation.GroupMemberModel, err error) {
-	filter := bson.M{"group_id": groupID, "nickname": bson.M{"$regex": keyword}}
+func (g *GroupMemberMgo) SearchMember(ctx context.Context, keyword string, groupID string, position int32, pagination pagination.Pagination) (total int64, groupList []*relation.GroupMemberModel, err error) {
+	var filter bson.M
+	if position == constant.GroupSearchPositionHead {
+		filter = bson.M{"group_id": groupID, "nickname": bson.M{"$regex": "^" + keyword}}
+	} else {
+		filter = bson.M{"group_id": groupID, "nickname": bson.M{"$regex": keyword}}
+	}
 	return mongoutil.FindPage[*relation.GroupMemberModel](ctx, g.coll, filter, pagination)
 }
 

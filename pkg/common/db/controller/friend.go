@@ -75,6 +75,8 @@ type FriendDatabase interface {
 
 	// UpdateFriends updates fields for friends
 	UpdateFriends(ctx context.Context, ownerUserID string, friendUserIDs []string, val map[string]any) (err error)
+
+	GetFriendHash(ctx context.Context, userID string) (int64, uint64, error)
 }
 
 type friendDatabase struct {
@@ -293,7 +295,7 @@ func (f *friendDatabase) UpdateRemark(ctx context.Context, ownerUserID, friendUs
 	if err := f.friend.UpdateRemark(ctx, ownerUserID, friendUserID, remark); err != nil {
 		return err
 	}
-	return f.cache.DelFriend(ownerUserID, friendUserID).ExecDel(ctx)
+	return f.cache.DelFriend(ownerUserID, friendUserID).DelFriendHash(ownerUserID).ExecDel(ctx)
 }
 
 // PageOwnerFriends retrieves the list of friends for the ownerUserID. It does not return an error if the result is empty.
@@ -343,4 +345,8 @@ func (f *friendDatabase) UpdateFriends(ctx context.Context, ownerUserID string, 
 		return err
 	}
 	return f.cache.DelFriends(ownerUserID, friendUserIDs).ExecDel(ctx)
+}
+
+func (f *friendDatabase) GetFriendHash(ctx context.Context, userID string) (int64, uint64, error) {
+	return f.cache.GetFriendHash(ctx, userID)
 }

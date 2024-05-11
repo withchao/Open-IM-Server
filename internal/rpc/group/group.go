@@ -1126,7 +1126,7 @@ func (s *groupServer) GetGroups(ctx context.Context, req *pbgroup.GetGroupsReq) 
 }
 
 func (s *groupServer) GetGroupMembersCMS(ctx context.Context, req *pbgroup.GetGroupMembersCMSReq) (*pbgroup.GetGroupMembersCMSResp, error) {
-	total, members, err := s.db.SearchGroupMember(ctx, req.UserName, req.GroupID, req.Pagination)
+	total, members, err := s.db.SearchGroupMember(ctx, req.UserName, req.GroupID, constant.GroupSearchPositionAny, req.Pagination)
 	if err != nil {
 		return nil, err
 	}

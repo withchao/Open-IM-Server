@@ -127,7 +127,7 @@ func (f *FriendMgo) FindReversalFriends(ctx context.Context, friendUserID string
 // FindOwnerFriends retrieves a paginated list of friends for a given owner.
 func (f *FriendMgo) FindOwnerFriends(ctx context.Context, ownerUserID string, pagination pagination.Pagination) (int64, []*relation.FriendModel, error) {
 	filter := bson.M{"owner_user_id": ownerUserID}
-	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination)
+	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, options.Find().SetSort(bson.M{"create_time": -1}))
 }
 
 // FindInWhoseFriends finds users who have added the specified user as a friend, with pagination.

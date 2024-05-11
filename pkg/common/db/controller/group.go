@@ -73,7 +73,7 @@ type GroupDatabase interface {
 	// PageGetGroupMember paginates through members of a group.
 	PageGetGroupMember(ctx context.Context, groupID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error)
 	// SearchGroupMember searches for group members based on a keyword, group ID, and pagination settings.
-	SearchGroupMember(ctx context.Context, keyword string, groupID string, pagination pagination.Pagination) (int64, []*relationtb.GroupMemberModel, error)
+	SearchGroupMember(ctx context.Context, keyword string, groupID string, position int32, pagination pagination.Pagination) (int64, []*relationtb.GroupMemberModel, error)
 	// HandlerGroupRequest processes a group join request with a specified result.
 	HandlerGroupRequest(ctx context.Context, groupID string, userID string, handledMsg string, handleResult int32, member *relationtb.GroupMemberModel) error
 	// DeleteGroupMember removes specified users from a group.
@@ -298,8 +298,8 @@ func (g *groupDatabase) PageGetGroupMember(ctx context.Context, groupID string, 
 	return int64(len(groupMemberIDs)), members, nil
 }
 
-func (g *groupDatabase) SearchGroupMember(ctx context.Context, keyword string, groupID string, pagination pagination.Pagination) (int64, []*relationtb.GroupMemberModel, error) {
-	return g.groupMemberDB.SearchMember(ctx, keyword, groupID, pagination)
+func (g *groupDatabase) SearchGroupMember(ctx context.Context, keyword string, groupID string, position int32, pagination pagination.Pagination) (int64, []*relationtb.GroupMemberModel, error) {
+	return g.groupMemberDB.SearchMember(ctx, keyword, groupID, position, pagination)
 }
 
 func (g *groupDatabase) HandlerGroupRequest(ctx context.Context, groupID string, userID string, handledMsg string, handleResult int32, member *relationtb.GroupMemberModel) error {

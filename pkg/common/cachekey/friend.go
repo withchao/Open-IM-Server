@@ -18,6 +18,7 @@ const (
 	FriendIDsKey        = "FRIEND_IDS:"
 	TwoWayFriendsIDsKey = "COMMON_FRIENDS_IDS:"
 	FriendKey           = "FRIEND_INFO:"
+	FriendHashKey       = "FRIEND_HASH:"
 	IsFriendKey         = "IS_FRIEND:" // local cache key
 )
 
@@ -31,6 +32,10 @@ func GetTwoWayFriendsIDsKey(ownerUserID string) string {
 
 func GetFriendKey(ownerUserID, friendUserID string) string {
 	return FriendKey + ownerUserID + "-" + friendUserID
+}
+
+func GetFriendHashKey(userID string) string {
+	return FriendHashKey + userID
 }
 
 func GetIsFriendKey(possibleFriendUserID, userID string) string {

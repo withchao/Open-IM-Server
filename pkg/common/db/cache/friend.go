@@ -16,6 +16,11 @@ package cache
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/binary"
+	"encoding/json"
+	"github.com/openimsdk/protocol/constant"
+	"github.com/openimsdk/protocol/sdkws"
 	"time"
 
 	"github.com/dtm-labs/rockscache"
@@ -43,10 +48,13 @@ type FriendCache interface {
 	DelFriendIDs(ownerUserID ...string) FriendCache
 	// Get single friendInfo from the cache
 	GetFriend(ctx context.Context, ownerUserID, friendUserID string) (friend *relationtb.FriendModel, err error)
+	GetFriendHash(ctx context.Context, userID string) (int64, uint64, error)
 	// Delete friend when friend info changed
 	DelFriend(ownerUserID, friendUserID string) FriendCache
 	// Delete friends when friends' info changed
 	DelFriends(ownerUserID string, friendUserIDs []string) FriendCache
+
+	DelFriendHash(userIDs ...string) FriendCache
 }
 
 // FriendCacheRedis is an implementation of the FriendCache interface using Redis.
@@ -97,6 +105,11 @@ func (f *FriendCacheRedis) getTwoWayFriendsIDsKey(ownerUserID string) string {
 // getFriendKey returns the key for storing friend info in the cache.
 func (f *FriendCacheRedis) getFriendKey(ownerUserID, friendUserID string) string {
 	return cachekey.GetFriendKey(ownerUserID, friendUserID)
+}
+
+// getFriendHashKey returns the key for storing friend hash in the cache.
+func (f *FriendCacheRedis) getFriendHashKey(userID string) string {
+	return cachekey.GetFriendHashKey(userID)
 }
 
 // GetFriendIDs retrieves friend IDs from the cache or the database if not found.
@@ -151,6 +164,40 @@ func (f *FriendCacheRedis) GetFriend(ctx context.Context, ownerUserID, friendUse
 		friendUserID), f.expireTime, func(ctx context.Context) (*relationtb.FriendModel, error) {
 		return f.friendDB.Take(ctx, ownerUserID, friendUserID)
 	})
+}
+
+func (f *FriendCacheRedis) GetFriendHash(ctx context.Context, userID string) (int64, uint64, error) {
+	type hashInfo struct {
+		Total int64  `json:"total"`
+		Hash  uint64 `json:"hash"`
+	}
+	res, err := getCache(ctx, f.rcClient, f.getFriendHashKey(userID), f.expireTime, func(ctx context.Context) (*hashInfo, error) {
+		total, friends, err := f.friendDB.FindOwnerFriends(ctx, userID, &sdkws.RequestPagination{PageNumber: constant.FirstPageNumber, ShowNumber: constant.MaxSyncPullNumber})
+		if err != nil {
+			return nil, err
+		}
+		data, err := json.Marshal(friends)
+		if err != nil {
+			return nil, err
+		}
+		sum := md5.Sum(data)
+		return &hashInfo{
+			Total: total,
+			Hash:  binary.BigEndian.Uint64(sum[:]),
+		}, nil
+	})
+	if err != nil {
+		return 0, 0, err
+	}
+	return res.Total, res.Hash, nil
+}
+
+func (f *FriendCacheRedis) DelFriendHash(userIDs ...string) FriendCache {
+	newFriendCache := f.NewCache()
+	for _, userID := range userIDs {
+		newFriendCache.AddKeys(f.getFriendHashKey(userID))
+	}
+	return newFriendCache
 }
 
 // DelFriend deletes friend info from the cache.

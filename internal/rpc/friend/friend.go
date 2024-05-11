@@ -428,10 +428,7 @@ func (s *friendServer) GetSpecifiedFriendsInfo(ctx context.Context, req *pbfrien
 	}
 	return resp, nil
 }
-func (s *friendServer) UpdateFriends(
-	ctx context.Context,
-	req *pbfriend.UpdateFriendsReq,
-) (*pbfriend.UpdateFriendsResp, error) {
+func (s *friendServer) UpdateFriends(ctx context.Context, req *pbfriend.UpdateFriendsReq) (*pbfriend.UpdateFriendsResp, error) {
 	if len(req.FriendUserIDs) == 0 {
 		return nil, errs.ErrArgs.WrapMsg("friendIDList is empty")
 	}
@@ -463,4 +460,15 @@ func (s *friendServer) UpdateFriends(
 
 	s.notificationSender.FriendsInfoUpdateNotification(ctx, req.OwnerUserID, req.FriendUserIDs)
 	return resp, nil
+}
+
+func (s *friendServer) GetFriendHash(ctx context.Context, req *pbfriend.GetFriendHashReq) (*pbfriend.GetFriendHashResp, error) {
+	total, hash, err := s.friendDatabase.GetFriendHash(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	return &pbfriend.GetFriendHashResp{
+		Total: total,
+		Hash:  hash,
+	}, nil
 }
