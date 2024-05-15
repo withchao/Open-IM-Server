@@ -18,9 +18,10 @@ import (
 	"context"
 	"crypto/md5"
 	"encoding/binary"
-	"encoding/json"
 	"github.com/openimsdk/protocol/constant"
 	"github.com/openimsdk/protocol/sdkws"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dtm-labs/rockscache"
@@ -176,11 +177,20 @@ func (f *FriendCacheRedis) GetFriendHash(ctx context.Context, userID string) (in
 		if err != nil {
 			return nil, err
 		}
-		data, err := json.Marshal(friends)
-		if err != nil {
-			return nil, err
-		}
-		sum := md5.Sum(data)
+		datautil.SortAny(friends, func(a, b *relationtb.FriendModel) bool {
+			return a.CreateTime.After(b.CreateTime)
+		})
+		sum := md5.Sum([]byte(strings.Join(datautil.Slice(friends, func(f *relationtb.FriendModel) string {
+			return strings.Join([]string{
+				f.FriendUserID,
+				f.Remark,
+				strconv.FormatInt(f.CreateTime.UnixMilli(), 10),
+				strconv.Itoa(int(f.AddSource)),
+				f.OperatorUserID,
+				f.Ex,
+				strconv.FormatBool(f.IsPinned),
+			}, ",")
+		}), ";")))
 		return &hashInfo{
 			Total: total,
 			Hash:  binary.BigEndian.Uint64(sum[:]),
