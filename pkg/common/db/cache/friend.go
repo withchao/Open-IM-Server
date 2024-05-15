@@ -167,33 +167,42 @@ func (f *FriendCacheRedis) GetFriend(ctx context.Context, ownerUserID, friendUse
 	})
 }
 
+func (f *FriendCacheRedis) getFriendHash(ctx context.Context, userID string) (int64, uint64, error) {
+	total, friends, err := f.friendDB.FindOwnerFriends(ctx, userID, &sdkws.RequestPagination{PageNumber: constant.FirstPageNumber, ShowNumber: constant.MaxSyncPullNumber})
+	if err != nil {
+		return 0, 0, err
+	}
+	datautil.SortAny(friends, func(a, b *relationtb.FriendModel) bool {
+		return a.CreateTime.After(b.CreateTime)
+	})
+	hashStr := strings.Join(datautil.Slice(friends, func(f *relationtb.FriendModel) string {
+		return strings.Join([]string{
+			f.FriendUserID,
+			f.Remark,
+			strconv.FormatInt(f.CreateTime.Unix(), 10),
+			strconv.Itoa(int(f.AddSource)),
+			f.OperatorUserID,
+			f.Ex,
+			strconv.FormatBool(f.IsPinned),
+		}, ",")
+	}), ";")
+	sum := md5.Sum([]byte(hashStr))
+	return total, binary.BigEndian.Uint64(sum[:]), nil
+}
+
 func (f *FriendCacheRedis) GetFriendHash(ctx context.Context, userID string) (int64, uint64, error) {
 	type hashInfo struct {
 		Total int64  `json:"total"`
 		Hash  uint64 `json:"hash"`
 	}
 	res, err := getCache(ctx, f.rcClient, f.getFriendHashKey(userID), f.expireTime, func(ctx context.Context) (*hashInfo, error) {
-		total, friends, err := f.friendDB.FindOwnerFriends(ctx, userID, &sdkws.RequestPagination{PageNumber: constant.FirstPageNumber, ShowNumber: constant.MaxSyncPullNumber})
+		total, hash, err := f.getFriendHash(ctx, userID)
 		if err != nil {
 			return nil, err
 		}
-		datautil.SortAny(friends, func(a, b *relationtb.FriendModel) bool {
-			return a.CreateTime.After(b.CreateTime)
-		})
-		sum := md5.Sum([]byte(strings.Join(datautil.Slice(friends, func(f *relationtb.FriendModel) string {
-			return strings.Join([]string{
-				f.FriendUserID,
-				f.Remark,
-				strconv.FormatInt(f.CreateTime.UnixMilli(), 10),
-				strconv.Itoa(int(f.AddSource)),
-				f.OperatorUserID,
-				f.Ex,
-				strconv.FormatBool(f.IsPinned),
-			}, ",")
-		}), ";")))
 		return &hashInfo{
 			Total: total,
-			Hash:  binary.BigEndian.Uint64(sum[:]),
+			Hash:  hash,
 		}, nil
 	})
 	if err != nil {
