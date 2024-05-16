@@ -71,4 +71,5 @@ type UserModelInterface interface {
 	UpdateUserCommand(ctx context.Context, userID string, Type int32, UUID string, val map[string]any) error
 	GetUserCommand(ctx context.Context, userID string, Type int32) ([]*user.CommandInfoResp, error)
 	GetAllUserCommand(ctx context.Context, userID string) ([]*user.AllCommandInfoResp, error)
+	SearchUser(ctx context.Context, keyword string, userIDs, addUserIDs []string, pagination pagination.Pagination) (int64, []*UserModel, error)
 }

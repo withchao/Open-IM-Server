@@ -98,3 +98,7 @@ func (o *FriendApi) UpdateFriends(c *gin.Context) {
 func (o *FriendApi) GetFriendHash(c *gin.Context) {
 	a2r.Call(friend.FriendClient.GetFriendHash, o.Client, c)
 }
+
+func (o *FriendApi) SearchFriends(c *gin.Context) {
+	a2r.Call(friend.FriendClient.SearchFriends, o.Client, c)
+}

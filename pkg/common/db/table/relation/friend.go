@@ -59,4 +59,5 @@ type FriendModelInterface interface {
 	FindFriendUserIDs(ctx context.Context, ownerUserID string) (friendUserIDs []string, err error)
 	// UpdateFriends update friends' fields
 	UpdateFriends(ctx context.Context, ownerUserID string, friendUserIDs []string, val map[string]any) (err error)
+	SearchFriendIDs(ctx context.Context, ownerUserID, keyword string) ([]string, error)
 }

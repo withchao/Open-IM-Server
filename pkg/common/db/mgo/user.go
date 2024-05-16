@@ -318,3 +318,22 @@ func (u *UserMgo) CountRangeEverydayTotal(ctx context.Context, start time.Time, 
 	}
 	return res, nil
 }
+
+func (u *UserMgo) SearchUser(ctx context.Context, keyword string, userIDs, addUserIDs []string, pagination pagination.Pagination) (int64, []*relation.UserModel, error) {
+	ors := make([]bson.M, 0, 2)
+	if keyword != "" {
+		ors = append(ors, bson.M{"nickname": primitive.Regex{Pattern: keyword, Options: "i"}})
+	}
+	if len(addUserIDs) > 0 {
+		ors = append(ors, bson.M{"user_id": bson.M{"$in": addUserIDs}})
+	}
+	filter := bson.M{}
+	if len(userIDs) > 0 {
+		filter["user_id"] = bson.M{"$in": userIDs}
+	}
+	if len(ors) > 0 {
+		filter["$or"] = ors
+	}
+	// Perform the paginated search
+	return mongoutil.FindPage[*relation.UserModel](ctx, u.coll, filter, pagination)
+}

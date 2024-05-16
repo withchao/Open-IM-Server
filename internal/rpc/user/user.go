@@ -683,3 +683,11 @@ func (s *userServer) userModelToResp(users []*relation.UserModel, pagination pag
 
 	return &pbuser.SearchNotificationAccountResp{Total: total, NotificationAccounts: notificationAccounts}
 }
+
+func (s *userServer) SearchUser(ctx context.Context, req *pbuser.SearchUserReq) (*pbuser.SearchUserResp, error) {
+	total, users, err := s.db.SearchUser(ctx, req.Keyword, req.UserIDs, req.Pagination)
+	if err != nil {
+		return nil, err
+	}
+	return &pbuser.SearchUserResp{Total: total, Users: convert.UsersDB2Pb(users)}, nil
+}

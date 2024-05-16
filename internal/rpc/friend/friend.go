@@ -18,6 +18,7 @@ import (
 	"context"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/webhook"
+	pbuser "github.com/openimsdk/protocol/user"
 	"github.com/openimsdk/tools/db/redisutil"
 
 	"github.com/openimsdk/open-im-server/v3/pkg/authverify"
@@ -470,5 +471,66 @@ func (s *friendServer) GetFriendHash(ctx context.Context, req *pbfriend.GetFrien
 	return &pbfriend.GetFriendHashResp{
 		Total: total,
 		Hash:  hash,
+	}, nil
+}
+
+func (s *friendServer) SearchFriends(ctx context.Context, req *pbfriend.SearchFriendsReq) (*pbfriend.SearchFriendsResp, error) {
+	if err := s.userRpcClient.Access(ctx, req.UserID); err != nil {
+		return nil, err
+	}
+	if req.Keyword == "" {
+		total, friends, err := s.friendDatabase.PageOwnerFriends(ctx, req.UserID, req.Pagination)
+		if err != nil {
+			return nil, err
+		}
+		fs, err := convert.FriendsDB2Pb(ctx, friends, s.userRpcClient.GetUsersInfoMap)
+		if err != nil {
+			return nil, err
+		}
+		return &pbfriend.SearchFriendsResp{
+			Total:   total,
+			Friends: fs,
+		}, nil
+	}
+	allFriendUserIDs, err := s.friendDatabase.FindFriendUserIDs(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if len(allFriendUserIDs) == 0 {
+		return &pbfriend.SearchFriendsResp{}, nil
+	}
+	friendUserIDs, err := s.friendDatabase.SearchFriendIDs(ctx, req.UserID, req.Keyword)
+	if err != nil {
+		return nil, err
+	}
+	reqUser := &pbuser.SearchUserReq{
+		Keyword:    req.Keyword,
+		UserIDs:    allFriendUserIDs,
+		AddUserIDs: friendUserIDs,
+		Pagination: &sdkws.RequestPagination{PageNumber: constant.FirstPageNumber, ShowNumber: int32(len(allFriendUserIDs))},
+	}
+	respUser, err := s.userRpcClient.Client.SearchUser(ctx, reqUser)
+	if err != nil {
+		return nil, err
+	}
+	userMap := datautil.SliceToMap(respUser.Users, func(e *sdkws.UserInfo) string {
+		return e.UserID
+	})
+	userIDs := datautil.Keys(userMap)
+	datautil.Sort(userIDs, true)
+	userIDs = datautil.SlicePaginate(userIDs, req.Pagination)
+	if len(userIDs) == 0 {
+		return &pbfriend.SearchFriendsResp{}, nil
+	}
+	friends, err := s.friendDatabase.FindFriendsWithError(ctx, req.UserID, userIDs)
+	if err != nil {
+		return nil, err
+	}
+	fs, err := convert.FriendsDB2Pb(ctx, friends, func(ctx context.Context, userIDs []string) (map[string]*sdkws.UserInfo, error) {
+		return userMap, nil
+	})
+	return &pbfriend.SearchFriendsResp{
+		Total:   int64(len(userIDs)),
+		Friends: fs,
 	}, nil
 }

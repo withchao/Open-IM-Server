@@ -77,6 +77,7 @@ type FriendDatabase interface {
 	UpdateFriends(ctx context.Context, ownerUserID string, friendUserIDs []string, val map[string]any) (err error)
 
 	GetFriendHash(ctx context.Context, userID string) (int64, uint64, error)
+	SearchFriendIDs(ctx context.Context, ownerUserID, keyword string) ([]string, error)
 }
 
 type friendDatabase struct {
@@ -349,4 +350,8 @@ func (f *friendDatabase) UpdateFriends(ctx context.Context, ownerUserID string, 
 
 func (f *friendDatabase) GetFriendHash(ctx context.Context, userID string) (int64, uint64, error) {
 	return f.cache.GetFriendHash(ctx, userID)
+}
+
+func (f *friendDatabase) SearchFriendIDs(ctx context.Context, ownerUserID, keyword string) ([]string, error) {
+	return f.friend.SearchFriendIDs(ctx, ownerUserID, keyword)
 }

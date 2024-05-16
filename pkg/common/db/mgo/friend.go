@@ -161,3 +161,14 @@ func (f *FriendMgo) UpdateFriends(ctx context.Context, ownerUserID string, frien
 	_, err := mongoutil.UpdateMany(ctx, f.coll, filter, update)
 	return err
 }
+
+func (f *FriendMgo) SearchFriendIDs(ctx context.Context, ownerUserID, keyword string) ([]string, error) {
+	filter := bson.M{
+		"owner_user_id": ownerUserID,
+		"$or": []bson.M{
+			{"remark": bson.M{"$regex": keyword, "$options": "i"}},
+			{"friend_user_id": bson.M{"$regex": keyword, "$options": "i"}},
+		},
+	}
+	return mongoutil.Find[string](ctx, f.coll, filter)
+}

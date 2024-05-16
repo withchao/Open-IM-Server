@@ -47,6 +47,7 @@ type UserDatabase interface {
 	PageFindUserWithKeyword(ctx context.Context, level1 int64, level2 int64, userID string, nickName string, pagination pagination.Pagination) (count int64, users []*relation.UserModel, err error)
 	// Page If not found, no error is returned
 	Page(ctx context.Context, pagination pagination.Pagination) (count int64, users []*relation.UserModel, err error)
+	SearchUser(ctx context.Context, keyword string, userIDs, addUserIDs []string, pagination pagination.Pagination) (int64, []*relation.UserModel, error)
 	// IsExist true as long as one exists
 	IsExist(ctx context.Context, userIDs []string) (exist bool, err error)
 	// GetAllUserID Get all user IDs
@@ -270,4 +271,8 @@ func (u *userDatabase) GetUserCommands(ctx context.Context, userID string, Type 
 func (u *userDatabase) GetAllUserCommands(ctx context.Context, userID string) ([]*user.AllCommandInfoResp, error) {
 	commands, err := u.userDB.GetAllUserCommand(ctx, userID)
 	return commands, err
+}
+
+func (u *userDatabase) SearchUser(ctx context.Context, keyword string, userIDs, addUserID []string, pagination pagination.Pagination) (int64, []*relation.UserModel, error) {
+	return u.userDB.SearchUser(ctx, keyword, userIDs, addUserID, pagination)
 }
