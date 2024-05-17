@@ -104,6 +104,8 @@ type GroupDatabase interface {
 	CountRangeEverydayTotal(ctx context.Context, start time.Time, end time.Time) (map[string]int64, error)
 	// DeleteGroupMemberHash deletes the hash entries for group members in specified groups.
 	DeleteGroupMemberHash(ctx context.Context, groupIDs []string) error
+
+	GetGroupMemberHashPart(ctx context.Context, groupID string) (*relationtb.GroupSimpleUserID, error)
 }
 
 func NewGroupDatabase(
@@ -340,6 +342,21 @@ func (g *groupDatabase) DeleteGroupMember(ctx context.Context, groupID string, u
 
 func (g *groupDatabase) MapGroupMemberUserID(ctx context.Context, groupIDs []string) (map[string]*relationtb.GroupSimpleUserID, error) {
 	return g.cache.GetGroupMemberHashMap(ctx, groupIDs)
+}
+
+func (g *groupDatabase) GetGroupMemberHashPart(ctx context.Context, groupID string) (*relationtb.GroupSimpleUserID, error) {
+	hash, err := g.cache.GetGroupMembersHashPart(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	num, err := g.cache.GetGroupMemberNum(ctx, groupID)
+	if err != nil {
+		return nil, err
+	}
+	return &relationtb.GroupSimpleUserID{
+		Hash:      hash,
+		MemberNum: uint32(num),
+	}, nil
 }
 
 func (g *groupDatabase) MapGroupMemberNum(ctx context.Context, groupIDs []string) (m map[string]uint32, err error) {

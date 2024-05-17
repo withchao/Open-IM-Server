@@ -100,7 +100,8 @@ func Start(ctx context.Context, config *Config, client discovery.SvcDiscoveryReg
 	msgRpcClient := rpcclient.NewMessageRpcClient(client, config.Share.RpcRegisterName.Msg)
 	conversationRpcClient := rpcclient.NewConversationRpcClient(client, config.Share.RpcRegisterName.Conversation)
 	var gs groupServer
-	database := controller.NewGroupDatabase(rdb, &config.LocalCacheConfig, groupDB, groupMemberDB, groupRequestDB, mgocli.GetTx(), grouphash.NewGroupHashFromGroupServer(&gs))
+	gh := grouphash.NewGroupHashFromGroupServer(&gs, groupMemberDB.GetGroupMemberHashPartUserIDs)
+	database := controller.NewGroupDatabase(rdb, &config.LocalCacheConfig, groupDB, groupMemberDB, groupRequestDB, mgocli.GetTx(), gh)
 	gs.db = database
 	gs.user = userRpcClient
 	gs.notification = NewGroupNotificationSender(database, &msgRpcClient, &userRpcClient, config, func(ctx context.Context, userIDs []string) ([]notification.CommonUser, error) {
@@ -1580,5 +1581,19 @@ func (s *groupServer) GetGroupUsersReqApplicationList(ctx context.Context, req *
 			}
 			return convert.Db2PbGroupRequest(e, nil, convert.Db2PbGroupInfo(groupMap[e.GroupID], ownerUserID, groupMemberNum[e.GroupID]))
 		}),
+	}, nil
+}
+
+func (s *groupServer) GetGroupMemberHash(ctx context.Context, req *pbgroup.GetGroupMemberHashReq) (*pbgroup.GetGroupMemberHashResp, error) {
+	if _, err := s.db.TakeGroup(ctx, req.GroupID); err != nil {
+		return nil, err
+	}
+	res, err := s.db.GetGroupMemberHashPart(ctx, req.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	return &pbgroup.GetGroupMemberHashResp{
+		Total: int64(res.MemberNum),
+		Hash:  res.Hash,
 	}, nil
 }

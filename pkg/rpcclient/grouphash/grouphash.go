@@ -19,6 +19,9 @@ import (
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/json"
+	"github.com/openimsdk/tools/errs"
+	"strconv"
+	"strings"
 
 	"github.com/openimsdk/protocol/group"
 	"github.com/openimsdk/protocol/sdkws"
@@ -44,7 +47,7 @@ func NewGroupHashFromGroupClient(x group.GroupClient) *GroupHash {
 	}
 }
 
-func NewGroupHashFromGroupServer(x group.GroupServer) *GroupHash {
+func NewGroupHashFromGroupServer(x group.GroupServer, getGroupHashPart func(ctx context.Context, groupID string) ([]string, error)) *GroupHash {
 	return &GroupHash{
 		getGroupAllUserIDs: func(ctx context.Context, groupID string) ([]string, error) {
 			resp, err := x.GetGroupMemberUserIDs(ctx, &group.GetGroupMemberUserIDsReq{GroupID: groupID})
@@ -60,12 +63,14 @@ func NewGroupHashFromGroupServer(x group.GroupServer) *GroupHash {
 			}
 			return resp.Members, nil
 		},
+		getGroupHashPart: getGroupHashPart,
 	}
 }
 
 type GroupHash struct {
 	getGroupAllUserIDs func(ctx context.Context, groupID string) ([]string, error)
 	getGroupMemberInfo func(ctx context.Context, groupID string, userIDs []string) ([]*sdkws.GroupMemberFullInfo, error)
+	getGroupHashPart   func(ctx context.Context, groupID string) ([]string, error)
 }
 
 func (gh *GroupHash) GetGroupHash(ctx context.Context, groupID string) (uint64, error) {
@@ -98,5 +103,48 @@ func (gh *GroupHash) GetGroupHash(ctx context.Context, groupID string) (uint64, 
 		return 0, err
 	}
 	sum := md5.Sum(data)
+	return binary.BigEndian.Uint64(sum[:]), nil
+}
+
+func (gh *GroupHash) GetGroupHashPart(ctx context.Context, groupID string) (uint64, error) {
+	userIDs, err := gh.getGroupHashPart(ctx, groupID)
+	if err != nil {
+		return 0, err
+	}
+	if len(userIDs) == 0 {
+		return 0, nil
+	}
+	members, err := gh.getGroupMemberInfo(ctx, groupID, userIDs)
+	if err != nil {
+		return 0, err
+	}
+	if len(userIDs) != len(members) {
+		return 0, errs.ErrInternalServer.WrapMsg("inconsistent acquisition of group members")
+	}
+	memberMap := datautil.SliceToMap(members, func(m *sdkws.GroupMemberFullInfo) string {
+		return m.UserID
+	})
+	arr := make([]string, 0, len(members))
+	for _, userID := range userIDs {
+		m, ok := memberMap[userID]
+		if ok {
+			return 0, errs.ErrInternalServer.WrapMsg("GetGroupPart member not found", "groupID", groupID, "userID", userID)
+		}
+		arr = append(arr, strings.Join(
+			[]string{
+				m.UserID,
+				m.Nickname,
+				m.FaceURL,
+				strconv.FormatInt(int64(m.RoleLevel), 10),
+				strconv.FormatInt(m.JoinTime, 10),
+				strconv.FormatInt(int64(m.JoinSource), 10),
+				m.InviterUserID,
+				strconv.FormatInt(m.MuteEndTime, 10),
+				m.OperatorUserID,
+				m.Ex,
+			}, ","))
+	}
+	hashStr := strings.Join(arr, ";")
+	sum := md5.Sum([]byte(hashStr))
 	return binary.BigEndian.Uint64(sum[:]), nil
 }

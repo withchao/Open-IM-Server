@@ -117,6 +117,7 @@ func newGinRouter(disCov discovery.SvcDiscoveryRegistry, config *Config) *gin.En
 		groupRouterGroup.POST("/get_groups", g.GetGroups)
 		groupRouterGroup.POST("/get_group_member_user_id", g.GetGroupMemberUserIDs)
 		groupRouterGroup.POST("/search_group_member", g.SearchGroupMember)
+		groupRouterGroup.POST("/get_group_member_hash", g.GetGroupMemberHash)
 	}
 	// certificate
 	authRouterGroup := r.Group("/auth")

@@ -24,6 +24,7 @@ const (
 	GroupInfoKey               = "GROUP_INFO:"
 	GroupMemberIDsKey          = "GROUP_MEMBER_IDS:"
 	GroupMembersHashKey        = "GROUP_MEMBERS_HASH2:"
+	GroupMembersHashPearKey    = "GROUP_MEMBERS_HASH3:"
 	GroupMemberInfoKey         = "GROUP_MEMBER_INFO:"
 	JoinedGroupsKey            = "JOIN_GROUPS_KEY:"
 	GroupMemberNumKey          = "GROUP_MEMBER_NUM_CACHE:"
@@ -40,6 +41,10 @@ func GetJoinedGroupsKey(userID string) string {
 
 func GetGroupMembersHashKey(groupID string) string {
 	return GroupMembersHashKey + groupID
+}
+
+func GetGroupMembersHashPearKey(groupID string) string {
+	return GroupMembersHashPearKey + groupID
 }
 
 func GetGroupMemberIDsKey(groupID string) string {

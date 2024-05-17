@@ -36,6 +36,7 @@ const (
 
 type GroupHash interface {
 	GetGroupHash(ctx context.Context, groupID string) (uint64, error)
+	GetGroupHashPart(ctx context.Context, groupID string) (uint64, error)
 }
 
 type GroupCache interface {
@@ -72,6 +73,7 @@ type GroupCache interface {
 	GetGroupRoleLevelMemberInfo(ctx context.Context, groupID string, roleLevel int32) ([]*relationtb.GroupMemberModel, error)
 	GetGroupRolesLevelMemberInfo(ctx context.Context, groupID string, roleLevels []int32) ([]*relationtb.GroupMemberModel, error)
 	GetGroupMemberNum(ctx context.Context, groupID string) (memberNum int64, err error)
+	GetGroupMembersHashPart(ctx context.Context, groupID string) (hashCode uint64, err error)
 	DelGroupsMemberNum(groupID ...string) GroupCache
 }
 
@@ -129,6 +131,10 @@ func (g *GroupCacheRedis) getJoinedGroupsKey(userID string) string {
 
 func (g *GroupCacheRedis) getGroupMembersHashKey(groupID string) string {
 	return cachekey.GetGroupMembersHashKey(groupID)
+}
+
+func (g *GroupCacheRedis) getGroupMembersHashPearKey(groupID string) string {
+	return cachekey.GetGroupMembersHashPearKey(groupID)
 }
 
 func (g *GroupCacheRedis) getGroupMemberIDsKey(groupID string) string {
@@ -228,6 +234,15 @@ func (g *GroupCacheRedis) GetGroupMembersHash(ctx context.Context, groupID strin
 	})
 }
 
+func (g *GroupCacheRedis) GetGroupMembersHashPart(ctx context.Context, groupID string) (hashCode uint64, err error) {
+	if g.groupHash == nil {
+		return 0, errs.ErrInternalServer.WrapMsg("group hash is nil")
+	}
+	return getCache(ctx, g.rcClient, g.getGroupMembersHashPearKey(groupID), g.expireTime, func(ctx context.Context) (uint64, error) {
+		return g.groupHash.GetGroupHashPart(ctx, groupID)
+	})
+}
+
 func (g *GroupCacheRedis) GetGroupMemberHashMap(ctx context.Context, groupIDs []string) (map[string]*relationtb.GroupSimpleUserID, error) {
 	if g.groupHash == nil {
 		return nil, errs.ErrInternalServer.WrapMsg("group hash is nil")
@@ -251,7 +266,7 @@ func (g *GroupCacheRedis) GetGroupMemberHashMap(ctx context.Context, groupIDs []
 
 func (g *GroupCacheRedis) DelGroupMembersHash(groupID string) GroupCache {
 	cache := g.NewCache()
-	cache.AddKeys(g.getGroupMembersHashKey(groupID))
+	cache.AddKeys(g.getGroupMembersHashKey(groupID), g.getGroupMembersHashPearKey(groupID))
 
 	return cache
 }

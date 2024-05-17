@@ -122,3 +122,8 @@ func (g *GroupMemberMgo) IsUpdateRoleLevel(data map[string]any) bool {
 	_, ok := data["role_level"]
 	return ok
 }
+
+func (g *GroupMemberMgo) GetGroupMemberHashPartUserIDs(ctx context.Context, groupID string) ([]string, error) {
+	opt := options.Find().SetProjection(bson.M{"_id": 0, "group_id": 1}).SetSort([]bson.M{{"role": -1}, {"join_time": -1}}).SetLimit(constant.MaxSyncPullNumber)
+	return mongoutil.Find[string](ctx, g.coll, bson.M{"groupID": groupID}, opt)
+}

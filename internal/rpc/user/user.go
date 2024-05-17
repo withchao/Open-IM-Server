@@ -685,7 +685,7 @@ func (s *userServer) userModelToResp(users []*relation.UserModel, pagination pag
 }
 
 func (s *userServer) SearchUser(ctx context.Context, req *pbuser.SearchUserReq) (*pbuser.SearchUserResp, error) {
-	total, users, err := s.db.SearchUser(ctx, req.Keyword, req.UserIDs, req.Pagination)
+	total, users, err := s.db.SearchUser(ctx, req.Keyword, req.UserIDs, req.AddUserIDs, req.Pagination)
 	if err != nil {
 		return nil, err
 	}
