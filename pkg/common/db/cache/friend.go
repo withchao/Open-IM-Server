@@ -60,6 +60,7 @@ type FriendCache interface {
 
 // FriendCacheRedis is an implementation of the FriendCache interface using Redis.
 type FriendCacheRedis struct {
+	hashNum int
 	metaCache
 	friendDB   relationtb.FriendModelInterface
 	expireTime time.Duration
@@ -67,8 +68,7 @@ type FriendCacheRedis struct {
 }
 
 // NewFriendCacheRedis creates a new instance of FriendCacheRedis.
-func NewFriendCacheRedis(rdb redis.UniversalClient, localCache *config.LocalCache, friendDB relationtb.FriendModelInterface,
-	options rockscache.Options) FriendCache {
+func NewFriendCacheRedis(rdb redis.UniversalClient, localCache *config.LocalCache, friendDB relationtb.FriendModelInterface, hashNum int, options rockscache.Options) FriendCache {
 	rcClient := rockscache.NewClient(rdb, options)
 	mc := NewMetaCacheRedis(rcClient)
 	f := localCache.Friend
@@ -76,6 +76,7 @@ func NewFriendCacheRedis(rdb redis.UniversalClient, localCache *config.LocalCach
 	mc.SetTopic(f.Topic)
 	mc.SetRawRedisClient(rdb)
 	return &FriendCacheRedis{
+		hashNum:    hashNum,
 		metaCache:  mc,
 		friendDB:   friendDB,
 		expireTime: friendExpireTime,
@@ -110,7 +111,7 @@ func (f *FriendCacheRedis) getFriendKey(ownerUserID, friendUserID string) string
 
 // getFriendHashKey returns the key for storing friend hash in the cache.
 func (f *FriendCacheRedis) getFriendHashKey(userID string) string {
-	return cachekey.GetFriendHashKey(userID)
+	return cachekey.GetFriendHashKey(f.hashNum, userID)
 }
 
 // GetFriendIDs retrieves friend IDs from the cache or the database if not found.
@@ -168,7 +169,7 @@ func (f *FriendCacheRedis) GetFriend(ctx context.Context, ownerUserID, friendUse
 }
 
 func (f *FriendCacheRedis) getFriendHash(ctx context.Context, userID string) (int64, uint64, error) {
-	total, friends, err := f.friendDB.FindOwnerFriends(ctx, userID, &sdkws.RequestPagination{PageNumber: constant.FirstPageNumber, ShowNumber: constant.MaxSyncPullNumber})
+	total, friends, err := f.friendDB.FindOwnerFriends(ctx, userID, &sdkws.RequestPagination{PageNumber: constant.FirstPageNumber, ShowNumber: int32(f.hashNum)})
 	if err != nil {
 		return 0, 0, err
 	}

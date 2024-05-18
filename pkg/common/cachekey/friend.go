@@ -14,6 +14,8 @@
 
 package cachekey
 
+import "strconv"
+
 const (
 	FriendIDsKey        = "FRIEND_IDS:"
 	TwoWayFriendsIDsKey = "COMMON_FRIENDS_IDS:"
@@ -34,8 +36,8 @@ func GetFriendKey(ownerUserID, friendUserID string) string {
 	return FriendKey + ownerUserID + "-" + friendUserID
 }
 
-func GetFriendHashKey(userID string) string {
-	return FriendHashKey + userID
+func GetFriendHashKey(num int, userID string) string {
+	return FriendHashKey + strconv.Itoa(num) + ":" + userID
 }
 
 func GetIsFriendKey(possibleFriendUserID, userID string) string {

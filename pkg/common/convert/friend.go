@@ -53,11 +53,26 @@ func FriendDB2Pb(ctx context.Context, friendDB *relation.FriendModel,
 	}, nil
 }
 
-func FriendsDB2Pb(
-	ctx context.Context,
-	friendsDB []*relation.FriendModel,
-	getUsers func(ctx context.Context, userIDs []string) (map[string]*sdkws.UserInfo, error),
-) (friendsPb []*sdkws.FriendInfo, err error) {
+func FriendsDB2PbV2(friendsDB []*relation.FriendModel) []*sdkws.FriendInfo {
+	return datautil.Slice(friendsDB, func(e *relation.FriendModel) *sdkws.FriendInfo {
+		return &sdkws.FriendInfo{
+			OwnerUserID: e.OwnerUserID,
+			Remark:      e.Remark,
+			CreateTime:  e.CreateTime.Unix(),
+			FriendUser: &sdkws.UserInfo{
+				UserID:   e.FriendUserID,
+				Nickname: e.Nickname,
+				FaceURL:  e.FaceURL,
+			},
+			AddSource:      e.AddSource,
+			OperatorUserID: e.OperatorUserID,
+			Ex:             e.Ex,
+			IsPinned:       e.IsPinned,
+		}
+	})
+}
+
+func FriendsDB2Pb(ctx context.Context, friendsDB []*relation.FriendModel, getUsers func(ctx context.Context, userIDs []string) (map[string]*sdkws.UserInfo, error)) (friendsPb []*sdkws.FriendInfo, err error) {
 	if len(friendsDB) == 0 {
 		return nil, nil
 	}
@@ -86,7 +101,6 @@ func FriendsDB2Pb(
 		friendsPb = append(friendsPb, friendPb)
 	}
 	return friendsPb, nil
-
 }
 
 func FriendRequestDB2Pb(ctx context.Context, friendRequests []*relation.FriendRequestModel, getUsers func(ctx context.Context, userIDs []string) (map[string]*sdkws.UserInfo, error)) ([]*sdkws.FriendRequest, error) {

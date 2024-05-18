@@ -37,6 +37,7 @@ func NewFriendMongo(db *mongo.Database) (relation.FriendModelInterface, error) {
 		Keys: bson.D{
 			{Key: "owner_user_id", Value: 1},
 			{Key: "friend_user_id", Value: 1},
+			{Key: "nickname", Value: 1},
 		},
 		Options: options.Index().SetUnique(true),
 	})
@@ -127,7 +128,8 @@ func (f *FriendMgo) FindReversalFriends(ctx context.Context, friendUserID string
 // FindOwnerFriends retrieves a paginated list of friends for a given owner.
 func (f *FriendMgo) FindOwnerFriends(ctx context.Context, ownerUserID string, pagination pagination.Pagination) (int64, []*relation.FriendModel, error) {
 	filter := bson.M{"owner_user_id": ownerUserID}
-	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, options.Find().SetSort(bson.M{"create_time": -1}))
+	opt := options.Find().SetSort(bson.A{bson.M{"nickname": 1}, bson.M{"create_time": 1}})
+	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, opt)
 }
 
 // FindInWhoseFriends finds users who have added the specified user as a friend, with pagination.
@@ -162,13 +164,15 @@ func (f *FriendMgo) UpdateFriends(ctx context.Context, ownerUserID string, frien
 	return err
 }
 
-func (f *FriendMgo) SearchFriendIDs(ctx context.Context, ownerUserID, keyword string) ([]string, error) {
+func (f *FriendMgo) SearchFriend(ctx context.Context, ownerUserID, keyword string, pagination pagination.Pagination) (int64, []*relation.FriendModel, error) {
 	filter := bson.M{
 		"owner_user_id": ownerUserID,
 		"$or": []bson.M{
 			{"remark": bson.M{"$regex": keyword, "$options": "i"}},
 			{"friend_user_id": bson.M{"$regex": keyword, "$options": "i"}},
+			{"nickname": bson.M{"$regex": keyword, "$options": "i"}},
 		},
 	}
-	return mongoutil.Find[string](ctx, f.coll, filter)
+	opt := options.Find().SetSort(bson.A{bson.M{"nickname": 1}, bson.M{"create_time": 1}})
+	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, opt)
 }

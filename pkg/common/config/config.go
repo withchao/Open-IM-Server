@@ -245,6 +245,7 @@ type Friend struct {
 		Ports      []int  `mapstructure:"ports"`
 	} `mapstructure:"rpc"`
 	Prometheus Prometheus `mapstructure:"prometheus"`
+	HashNum    int        `mapstructure:"hashNum"`
 }
 
 type Group struct {

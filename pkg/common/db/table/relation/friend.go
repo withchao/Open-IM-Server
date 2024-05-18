@@ -25,6 +25,8 @@ import (
 type FriendModel struct {
 	OwnerUserID    string    `bson:"owner_user_id"`
 	FriendUserID   string    `bson:"friend_user_id"`
+	Nickname       string    `bson:"nickname"`
+	FaceURL        string    `bson:"face_url"`
 	Remark         string    `bson:"remark"`
 	CreateTime     time.Time `bson:"create_time"`
 	AddSource      int32     `bson:"add_source"`
@@ -59,5 +61,6 @@ type FriendModelInterface interface {
 	FindFriendUserIDs(ctx context.Context, ownerUserID string) (friendUserIDs []string, err error)
 	// UpdateFriends update friends' fields
 	UpdateFriends(ctx context.Context, ownerUserID string, friendUserIDs []string, val map[string]any) (err error)
-	SearchFriendIDs(ctx context.Context, ownerUserID, keyword string) ([]string, error)
+
+	SearchFriend(ctx context.Context, ownerUserID, keyword string, pagination pagination.Pagination) (int64, []*FriendModel, error)
 }
