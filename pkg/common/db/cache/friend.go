@@ -56,6 +56,8 @@ type FriendCache interface {
 	DelFriends(ownerUserID string, friendUserIDs []string) FriendCache
 
 	DelFriendHash(userIDs ...string) FriendCache
+
+	DelOwner(friendUserID string, ownerUserIDs []string) FriendCache
 }
 
 // FriendCacheRedis is an implementation of the FriendCache interface using Redis.
@@ -176,8 +178,10 @@ func (f *FriendCacheRedis) getFriendHash(ctx context.Context, userID string) (in
 	datautil.SortAny(friends, func(a, b *relationtb.FriendModel) bool {
 		return a.CreateTime.After(b.CreateTime)
 	})
-	hashStr := strings.Join(datautil.Slice(friends, func(f *relationtb.FriendModel) string {
-		return strings.Join([]string{
+	arr := make([]string, 0, len(friends)+1)
+	arr = append(arr, strconv.Itoa(int(total)))
+	for _, f := range friends {
+		arr = append(arr, strings.Join([]string{
 			f.FriendUserID,
 			f.Remark,
 			strconv.FormatInt(f.CreateTime.Unix(), 10),
@@ -185,8 +189,9 @@ func (f *FriendCacheRedis) getFriendHash(ctx context.Context, userID string) (in
 			f.OperatorUserID,
 			f.Ex,
 			strconv.FormatBool(f.IsPinned),
-		}, ",")
-	}), ";")
+		}, ","))
+	}
+	hashStr := strings.Join(arr, ";")
 	sum := md5.Sum([]byte(hashStr))
 	return total, binary.BigEndian.Uint64(sum[:]), nil
 }
@@ -233,6 +238,17 @@ func (f *FriendCacheRedis) DelFriends(ownerUserID string, friendUserIDs []string
 	newFriendCache := f.NewCache()
 
 	for _, friendUserID := range friendUserIDs {
+		key := f.getFriendKey(ownerUserID, friendUserID)
+		newFriendCache.AddKeys(key) // Assuming AddKeys marks the keys for deletion
+	}
+
+	return newFriendCache
+}
+
+func (f *FriendCacheRedis) DelOwner(friendUserID string, ownerUserIDs []string) FriendCache {
+	newFriendCache := f.NewCache()
+
+	for _, ownerUserID := range ownerUserIDs {
 		key := f.getFriendKey(ownerUserID, friendUserID)
 		newFriendCache.AddKeys(key) // Assuming AddKeys marks the keys for deletion
 	}

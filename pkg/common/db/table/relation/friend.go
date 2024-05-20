@@ -63,4 +63,8 @@ type FriendModelInterface interface {
 	UpdateFriends(ctx context.Context, ownerUserID string, friendUserIDs []string, val map[string]any) (err error)
 
 	SearchFriend(ctx context.Context, ownerUserID, keyword string, pagination pagination.Pagination) (int64, []*FriendModel, error)
+
+	FindFriendUserID(ctx context.Context, friendUserID string) ([]string, error)
+
+	UpdateFriendUserInfo(ctx context.Context, friendUserID string, nickname string, faceURL string) error
 }

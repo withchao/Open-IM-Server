@@ -16,6 +16,7 @@ package mgo
 
 import (
 	"context"
+	"github.com/openimsdk/tools/errs"
 
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/table/relation"
 	"github.com/openimsdk/tools/db/mongoutil"
@@ -73,15 +74,6 @@ func (f *FriendMgo) UpdateByMap(ctx context.Context, ownerUserID string, friendU
 	return mongoutil.UpdateOne(ctx, f.coll, filter, bson.M{"$set": args}, true)
 }
 
-// Update modifies multiple friend documents.
-// func (f *FriendMgo) Update(ctx context.Context, friends []*relation.FriendModel) error {
-// 	filter := bson.M{
-// 		"owner_user_id":  ownerUserID,
-// 		"friend_user_id": friendUserID,
-// 	}
-// 	return mgotool.UpdateMany(ctx, f.coll, filter, friends)
-// }
-
 // UpdateRemark updates the remark for a specific friend.
 func (f *FriendMgo) UpdateRemark(ctx context.Context, ownerUserID, friendUserID, remark string) error {
 	return f.UpdateByMap(ctx, ownerUserID, friendUserID, map[string]any{"remark": remark})
@@ -127,9 +119,13 @@ func (f *FriendMgo) FindReversalFriends(ctx context.Context, friendUserID string
 
 // FindOwnerFriends retrieves a paginated list of friends for a given owner.
 func (f *FriendMgo) FindOwnerFriends(ctx context.Context, ownerUserID string, pagination pagination.Pagination) (int64, []*relation.FriendModel, error) {
-	filter := bson.M{"owner_user_id": ownerUserID}
-	opt := options.Find().SetSort(bson.A{bson.M{"nickname": 1}, bson.M{"create_time": 1}})
-	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, opt)
+	where := bson.M{
+		"owner_user_id": ownerUserID,
+	}
+	return f.aggregatePagination(ctx, where, pagination)
+	//filter := bson.M{"owner_user_id": ownerUserID}
+	//opt := options.Find().SetSort(bson.A{bson.M{"nickname": 1}, bson.M{"create_time": 1}})
+	//return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, opt)
 }
 
 // FindInWhoseFriends finds users who have added the specified user as a friend, with pagination.
@@ -164,8 +160,60 @@ func (f *FriendMgo) UpdateFriends(ctx context.Context, ownerUserID string, frien
 	return err
 }
 
+type Friend struct {
+	Nickname string `bson:"nickname"`
+	Remark   string `bson:"remark"`
+}
+
+func (f *FriendMgo) aggregatePagination(ctx context.Context, where any, pagination pagination.Pagination) (int64, []*relation.FriendModel, error) {
+	if pagination == nil {
+		return 0, nil, errs.ErrArgs.WrapMsg("pagination is required")
+	}
+	count, err := mongoutil.Count(ctx, f.coll, where)
+	if err != nil {
+		return 0, nil, err
+	}
+	skip := int64(pagination.GetPageNumber()-1) * int64(pagination.GetShowNumber())
+	if skip < 0 || skip >= count || pagination.GetShowNumber() <= 0 {
+		return count, nil, nil
+	}
+	pipeline := []bson.M{
+		{
+			"$match": where,
+		},
+		{
+			"$addFields": bson.M{
+				"sort_field": bson.M{
+					"$cond": bson.M{
+						"if":   bson.M{"$eq": bson.A{"$remark", ""}},
+						"then": "$nickname",
+						"else": "$remark",
+					},
+				},
+			},
+		},
+		{
+			"$sort": bson.D{
+				{"sort_field", 1},
+				{"create_time", 1},
+			},
+		},
+		{
+			"$skip": skip,
+		},
+		{
+			"$limit": pagination.GetShowNumber(),
+		},
+	}
+	friends, err := mongoutil.Aggregate[*relation.FriendModel](ctx, f.coll, pipeline)
+	if err != nil {
+		return 0, nil, err
+	}
+	return count, friends, nil
+}
+
 func (f *FriendMgo) SearchFriend(ctx context.Context, ownerUserID, keyword string, pagination pagination.Pagination) (int64, []*relation.FriendModel, error) {
-	filter := bson.M{
+	where := bson.M{
 		"owner_user_id": ownerUserID,
 		"$or": []bson.M{
 			{"remark": bson.M{"$regex": keyword, "$options": "i"}},
@@ -173,6 +221,20 @@ func (f *FriendMgo) SearchFriend(ctx context.Context, ownerUserID, keyword strin
 			{"nickname": bson.M{"$regex": keyword, "$options": "i"}},
 		},
 	}
-	opt := options.Find().SetSort(bson.A{bson.M{"nickname": 1}, bson.M{"create_time": 1}})
-	return mongoutil.FindPage[*relation.FriendModel](ctx, f.coll, filter, pagination, opt)
+	return f.aggregatePagination(ctx, where, pagination)
+}
+
+func (f *FriendMgo) FindFriendUserID(ctx context.Context, friendUserID string) ([]string, error) {
+	filter := bson.M{
+		"friend_user_id": friendUserID,
+	}
+	return mongoutil.Find[string](ctx, f.coll, filter, options.Find().SetProjection(bson.M{"_id": 0, "owner_user_id": 1}))
+}
+
+func (f *FriendMgo) UpdateFriendUserInfo(ctx context.Context, friendUserID string, nickname string, faceURL string) error {
+	filter := bson.M{
+		"friend_user_id": friendUserID,
+	}
+	_, err := mongoutil.UpdateMany(ctx, f.coll, filter, bson.M{"$set": bson.M{"nickname": nickname, "face_url": faceURL}})
+	return err
 }
