@@ -20,6 +20,7 @@ import (
 	"github.com/openimsdk/open-im-server/v3/pkg/common/config"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/db/cache"
 	"github.com/openimsdk/open-im-server/v3/pkg/common/webhook"
+	"github.com/openimsdk/tools/mq/memamq"
 	"math/big"
 	"math/rand"
 	"strconv"
@@ -62,6 +63,7 @@ type groupServer struct {
 	msgRpcClient          rpcclient.MessageRpcClient
 	config                *Config
 	webhookClient         *webhook.Client
+	queue                 *memamq.MemoryQueue
 }
 
 type Config struct {
@@ -100,6 +102,7 @@ func Start(ctx context.Context, config *Config, client discovery.SvcDiscoveryReg
 	msgRpcClient := rpcclient.NewMessageRpcClient(client, config.Share.RpcRegisterName.Msg)
 	conversationRpcClient := rpcclient.NewConversationRpcClient(client, config.Share.RpcRegisterName.Conversation)
 	var gs groupServer
+	gs.queue = memamq.NewMemoryQueue(8, 1024)
 	gh := grouphash.NewGroupHashFromGroupServer(&gs, groupMemberDB.GetGroupMemberHashPartUserIDs)
 	database := controller.NewGroupDatabase(rdb, &config.LocalCacheConfig, groupDB, groupMemberDB, groupRequestDB, mgocli.GetTx(), gh)
 	gs.db = database
@@ -121,20 +124,61 @@ func Start(ctx context.Context, config *Config, client discovery.SvcDiscoveryReg
 }
 
 func (s *groupServer) NotificationUserInfoUpdate(ctx context.Context, req *pbgroup.NotificationUserInfoUpdateReq) (*pbgroup.NotificationUserInfoUpdateResp, error) {
-	members, err := s.db.FindGroupMemberUser(ctx, nil, req.UserID)
+	var err error
+	if req.NewUserInfo == nil {
+		req.NewUserInfo, err = s.user.GetUserInfo(ctx, req.UserID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if req.UserID != req.NewUserInfo.UserID {
+		return nil, errs.ErrArgs.WrapMsg("req.UserID != req.NewUserInfo.UserID")
+	}
+	var (
+		oldNickname string
+		oldFaceURL  string
+	)
+	if req.OldUserInfo != nil {
+		oldNickname = req.OldUserInfo.Nickname
+		oldFaceURL = req.OldUserInfo.FaceURL
+	}
+	groupIDs, err := s.db.UpdateGroupMemberUserInfo(ctx, req.UserID, oldNickname, oldFaceURL, req.NewUserInfo.Nickname, req.NewUserInfo.FaceURL)
 	if err != nil {
 		return nil, err
 	}
-	groupIDs := make([]string, 0, len(members))
-	for _, member := range members {
-		if member.Nickname != "" && member.FaceURL != "" {
-			continue
+	// todo
+	s.queue.Push(func() {
+		// todo ctx
+		for _, groupID := range groupIDs {
+			s.notification.GroupMemberInfoSetNotification(ctx, groupID, req.UserID)
 		}
-		groupIDs = append(groupIDs, member.GroupID)
-	}
-	for _, groupID := range groupIDs {
-		s.notification.GroupMemberInfoSetNotification(ctx, groupID, req.UserID)
-	}
+	})
+
+	//if err = ; err != nil {
+	//	return nil, err
+	//}
+
+	//members, err := s.db.FindGroupMemberUser(ctx, nil, req.UserID)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//var groupIDs []string
+	//for _, member := range members {
+	//	if req.OldUserInfo == nil {
+	//		groupIDs = append(groupIDs, member.GroupID)
+	//	}
+	//}
+	//
+	//groupIDs := make([]string, 0, len(members))
+	//for _, member := range members {
+	//	if member.Nickname != "" && member.FaceURL != "" {
+	//		continue
+	//	}
+	//	groupIDs = append(groupIDs, member.GroupID)
+	//}
+	//for _, groupID := range groupIDs {
+	//	s.notification.GroupMemberInfoSetNotification(ctx, groupID, req.UserID)
+	//}
 	if err = s.db.DeleteGroupMemberHash(ctx, groupIDs); err != nil {
 		return nil, err
 	}

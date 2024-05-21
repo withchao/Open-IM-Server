@@ -43,6 +43,8 @@ type GroupDatabase interface {
 	// DismissGroup disbands a group and optionally removes its members based on the deleteMember flag.
 	DismissGroup(ctx context.Context, groupID string, deleteMember bool) error
 
+	UpdateGroupMemberUserInfo(ctx context.Context, userID string, oldNickname string, oldFaceURL string, newNickname string, newFaceURL string) ([]string, error)
+
 	// TakeGroupMember retrieves a specific group member by group ID and user ID.
 	TakeGroupMember(ctx context.Context, groupID string, userID string) (groupMember *relationtb.GroupMemberModel, err error)
 	// TakeGroupOwner retrieves the owner of a group by group ID.
@@ -70,6 +72,8 @@ type GroupDatabase interface {
 
 	// PageGetJoinGroup paginates through groups that a user has joined.
 	PageGetJoinGroup(ctx context.Context, userID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error)
+
+	GetJoinedGroupIDs(ctx context.Context, userID string) ([]string, error)
 	// PageGetGroupMember paginates through members of a group.
 	PageGetGroupMember(ctx context.Context, groupID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error)
 	// SearchGroupMember searches for group members based on a keyword, group ID, and pagination settings.
@@ -284,6 +288,10 @@ func (g *groupDatabase) PageGetJoinGroup(ctx context.Context, userID string, pag
 	return int64(len(groupIDs)), totalGroupMembers, nil
 }
 
+func (g *groupDatabase) GetJoinedGroupIDs(ctx context.Context, userID string) ([]string, error) {
+	return g.cache.GetJoinedGroupIDs(ctx, userID)
+}
+
 func (g *groupDatabase) PageGetGroupMember(ctx context.Context, groupID string, pagination pagination.Pagination) (total int64, totalGroupMembers []*relationtb.GroupMemberModel, err error) {
 	groupMemberIDs, err := g.cache.GetGroupMemberIDs(ctx, groupID)
 	if err != nil {
@@ -456,4 +464,55 @@ func (g *groupDatabase) DeleteGroupMemberHash(ctx context.Context, groupIDs []st
 		c = c.DelGroupMembersHash(groupID)
 	}
 	return c.ExecDel(ctx)
+}
+
+func (g *groupDatabase) UpdateGroupMemberUserInfo(ctx context.Context, userID string, oldNickname string, oldFaceURL string, newNickname string, newFaceURL string) ([]string, error) {
+	var (
+		nicknameGroupIDs []string
+		faceURLGroupIDs  []string
+	)
+	if oldNickname == "" && oldFaceURL == "" {
+		groupIDs, err := g.cache.GetJoinedGroupIDs(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		nicknameGroupIDs = groupIDs
+		faceURLGroupIDs = groupIDs
+	} else {
+		members, err := g.cache.FindGroupMemberUser(ctx, nil, userID)
+		if err != nil {
+			return nil, err
+		}
+		for _, member := range members {
+			if member.Nickname == "" || oldNickname == "" || member.Nickname == oldNickname {
+				nicknameGroupIDs = append(nicknameGroupIDs, member.GroupID)
+			}
+			if member.FaceURL == "" || oldFaceURL == "" || member.FaceURL == oldFaceURL {
+				faceURLGroupIDs = append(faceURLGroupIDs, member.GroupID)
+			}
+		}
+	}
+	if len(nicknameGroupIDs)+len(faceURLGroupIDs) == 0 {
+		return nil, nil
+	}
+	if len(nicknameGroupIDs) > 0 {
+		if err := g.groupMemberDB.UpdateGroupMemberNickname(ctx, userID, nicknameGroupIDs, newNickname); err != nil {
+			return nil, err
+		}
+	}
+	if len(faceURLGroupIDs) > 0 {
+		if err := g.groupMemberDB.UpdateGroupMemberFaceURL(ctx, userID, faceURLGroupIDs, newFaceURL); err != nil {
+			return nil, err
+		}
+	}
+	groupIDs := datautil.Distinct(append(nicknameGroupIDs, faceURLGroupIDs...))
+	c := g.cache.NewCache()
+	for _, groupID := range groupIDs {
+		c.DelGroupMembersInfo(groupID, userID)
+		c.DelGroupMembersHash(groupID)
+	}
+	if err := c.ExecDel(ctx); err != nil {
+		return nil, err
+	}
+	return groupIDs, nil
 }

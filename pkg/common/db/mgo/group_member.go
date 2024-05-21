@@ -66,9 +66,26 @@ func (g *GroupMemberMgo) Update(ctx context.Context, groupID string, userID stri
 	return mongoutil.UpdateOne(ctx, g.coll, bson.M{"group_id": groupID, "user_id": userID}, bson.M{"$set": data}, true)
 }
 
-func (g *GroupMemberMgo) Find(ctx context.Context, groupIDs []string, userIDs []string, roleLevels []int32) (groupMembers []*relation.GroupMemberModel, err error) {
-	// TODO implement me
-	panic("implement me")
+func (g *GroupMemberMgo) UpdateGroupMemberNickname(ctx context.Context, userID string, groupIDs []string, nickname string) error {
+	filter := bson.M{
+		"user_id": userID,
+		"group_id": bson.M{
+			"$in": groupIDs,
+		},
+	}
+	_, err := mongoutil.UpdateMany(ctx, g.coll, filter, bson.M{"$set": bson.M{"nickname": nickname}})
+	return err
+}
+
+func (g *GroupMemberMgo) UpdateGroupMemberFaceURL(ctx context.Context, userID string, groupIDs []string, faceURL string) error {
+	filter := bson.M{
+		"user_id": userID,
+		"group_id": bson.M{
+			"$in": groupIDs,
+		},
+	}
+	_, err := mongoutil.UpdateMany(ctx, g.coll, filter, bson.M{"$set": bson.M{"face_url": faceURL}})
+	return err
 }
 
 func (g *GroupMemberMgo) FindMemberUserID(ctx context.Context, groupID string) (userIDs []string, err error) {

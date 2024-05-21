@@ -55,4 +55,6 @@ type GroupMemberModelInterface interface {
 	FindUserManagedGroupID(ctx context.Context, userID string) (groupIDs []string, err error)
 	IsUpdateRoleLevel(data map[string]any) bool
 	GetGroupMemberHashPartUserIDs(ctx context.Context, groupID string) ([]string, error)
+	UpdateGroupMemberNickname(ctx context.Context, userID string, groupIDs []string, nickname string) error
+	UpdateGroupMemberFaceURL(ctx context.Context, userID string, groupIDs []string, faceURL string) error
 }
