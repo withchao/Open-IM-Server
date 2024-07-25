@@ -8,13 +8,6 @@ import (
 	"time"
 )
 
-func Result[V any](val V, err error) V {
-	if err != nil {
-		panic(err)
-	}
-	return val
-}
-
 func Mongodb() *mongo.Database {
 	return Result(
 		mongo.Connect(context.Background(),
@@ -26,7 +19,7 @@ func Mongodb() *mongo.Database {
 
 func TestUserSeq(t *testing.T) {
 	uSeq := Result(NewSeqUserMongo(Mongodb())).(*seqUserMongo)
-	t.Log(uSeq.SetMinSeq(context.Background(), "1000", "2000", 4))
+	t.Log(uSeq.SetUserMinSeq(context.Background(), "1000", "2000", 4))
 }
 
 func TestConversationSeq(t *testing.T) {

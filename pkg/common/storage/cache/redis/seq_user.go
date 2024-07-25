@@ -44,41 +44,41 @@ func (s *seqUserCacheRedis) getSeqUserReadSeqKey(conversationID string, userID s
 	return cachekey.GetSeqUserReadSeqKey(conversationID, userID)
 }
 
-func (s *seqUserCacheRedis) GetMaxSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
+func (s *seqUserCacheRedis) GetUserMaxSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return getCache(ctx, s.rocks, s.getSeqUserMaxSeqKey(conversationID, userID), s.expireTime, func(ctx context.Context) (int64, error) {
-		return s.mgo.GetMaxSeq(ctx, conversationID, userID)
+		return s.mgo.GetUserMaxSeq(ctx, conversationID, userID)
 	})
 }
 
-func (s *seqUserCacheRedis) SetMaxSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
-	if err := s.mgo.SetMaxSeq(ctx, conversationID, userID, seq); err != nil {
+func (s *seqUserCacheRedis) SetUserMaxSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
+	if err := s.mgo.SetUserMaxSeq(ctx, conversationID, userID, seq); err != nil {
 		return err
 	}
 	return s.rocks.TagAsDeleted2(ctx, s.getSeqUserMaxSeqKey(conversationID, userID))
 }
 
-func (s *seqUserCacheRedis) GetMinSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
+func (s *seqUserCacheRedis) GetUserMinSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return getCache(ctx, s.rocks, s.getSeqUserMinSeqKey(conversationID, userID), s.expireTime, func(ctx context.Context) (int64, error) {
-		return s.mgo.GetMaxSeq(ctx, conversationID, userID)
+		return s.mgo.GetUserMinSeq(ctx, conversationID, userID)
 	})
 }
 
-func (s *seqUserCacheRedis) SetMinSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
-	if err := s.mgo.SetMinSeq(ctx, conversationID, userID, seq); err != nil {
+func (s *seqUserCacheRedis) SetUserMinSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
+	if err := s.mgo.SetUserMinSeq(ctx, conversationID, userID, seq); err != nil {
 		return err
 	}
 	return s.rocks.TagAsDeleted2(ctx, s.getSeqUserMinSeqKey(conversationID, userID))
 }
 
-func (s *seqUserCacheRedis) GetReadSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
+func (s *seqUserCacheRedis) GetUserReadSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return getCache(ctx, s.rocks, s.getSeqUserReadSeqKey(conversationID, userID), s.readExpireTime, func(ctx context.Context) (int64, error) {
-		return s.mgo.GetMaxSeq(ctx, conversationID, userID)
+		return s.mgo.GetUserReadSeq(ctx, conversationID, userID)
 	})
 }
 
-func (s *seqUserCacheRedis) SetReadSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
+func (s *seqUserCacheRedis) SetUserReadSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
 	if seq%s.readSeqWriteRatio == 0 {
-		if err := s.mgo.SetReadSeq(ctx, conversationID, userID, seq); err != nil {
+		if err := s.mgo.SetUserReadSeq(ctx, conversationID, userID, seq); err != nil {
 			return err
 		}
 	}

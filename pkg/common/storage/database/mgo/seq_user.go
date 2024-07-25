@@ -67,26 +67,26 @@ func (s *seqUserMongo) getSeq(ctx context.Context, conversationID string, userID
 	}
 }
 
-func (s *seqUserMongo) GetMaxSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
+func (s *seqUserMongo) GetUserMaxSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return s.getSeq(ctx, conversationID, userID, "max_seq")
 }
 
-func (s *seqUserMongo) SetMaxSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
+func (s *seqUserMongo) SetUserMaxSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
 	return s.setSeq(ctx, conversationID, userID, seq, "max_seq")
 }
 
-func (s *seqUserMongo) GetMinSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
+func (s *seqUserMongo) GetUserMinSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return s.getSeq(ctx, conversationID, userID, "min_seq")
 }
 
-func (s *seqUserMongo) SetMinSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
+func (s *seqUserMongo) SetUserMinSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
 	return s.setSeq(ctx, conversationID, userID, seq, "min_seq")
 }
 
-func (s *seqUserMongo) GetReadSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
+func (s *seqUserMongo) GetUserReadSeq(ctx context.Context, conversationID string, userID string) (int64, error) {
 	return s.getSeq(ctx, conversationID, userID, "read_seq")
 }
 
-func (s *seqUserMongo) SetReadSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
+func (s *seqUserMongo) SetUserReadSeq(ctx context.Context, conversationID string, userID string, seq int64) error {
 	return s.setSeq(ctx, conversationID, userID, seq, "read_seq")
 }
