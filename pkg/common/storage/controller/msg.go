@@ -74,11 +74,15 @@ type CommonMsgDatabase interface {
 	GetHasReadSeq(ctx context.Context, userID string, conversationID string) (int64, error)
 	UserSetHasReadSeqs(ctx context.Context, userID string, hasReadSeqs map[string]int64) error
 
+	GetMaxSeqsWithTime(ctx context.Context, conversationIDs []string) (map[string]database.SeqTime, error)
+	GetMaxSeqWithTime(ctx context.Context, conversationID string) (database.SeqTime, error)
+	GetCacheMaxSeqWithTime(ctx context.Context, conversationIDs []string) (map[string]database.SeqTime, error)
+
 	//GetMongoMaxAndMinSeq(ctx context.Context, conversationID string) (minSeqMongo, maxSeqMongo int64, err error)
 	//GetConversationMinMaxSeqInMongoAndCache(ctx context.Context, conversationID string) (minSeqMongo, maxSeqMongo, minSeqCache, maxSeqCache int64, err error)
 	SetSendMsgStatus(ctx context.Context, id string, status int32) error
 	GetSendMsgStatus(ctx context.Context, id string) (int32, error)
-	SearchMessage(ctx context.Context, req *pbmsg.SearchMessageReq) (total int64, msgData []*sdkws.MsgData, err error)
+	SearchMessage(ctx context.Context, req *pbmsg.SearchMessageReq) (total int64, msgData []*pbmsg.SearchedMsgData, err error)
 	FindOneByDocIDs(ctx context.Context, docIDs []string, seqs map[string]int64) (map[string]*sdkws.MsgData, error)
 
 	// to mq
@@ -446,7 +450,7 @@ func (db *commonMsgDatabase) GetMsgBySeqsRange(ctx context.Context, userID strin
 
 func (db *commonMsgDatabase) GetMsgBySeqs(ctx context.Context, userID string, conversationID string, seqs []int64) (int64, int64, []*sdkws.MsgData, error) {
 	userMinSeq, err := db.seqUser.GetUserMinSeq(ctx, conversationID, userID)
-	if err != nil && errs.Unwrap(err) != redis.Nil {
+	if err != nil {
 		return 0, 0, nil, err
 	}
 	minSeq, err := db.seqConversation.GetMinSeq(ctx, conversationID)
@@ -457,14 +461,27 @@ func (db *commonMsgDatabase) GetMsgBySeqs(ctx context.Context, userID string, co
 	if err != nil {
 		return 0, 0, nil, err
 	}
-	if userMinSeq < minSeq {
+	userMaxSeq, err := db.seqUser.GetUserMaxSeq(ctx, conversationID, userID)
+	if err != nil {
+		return 0, 0, nil, err
+	}
+	if userMinSeq > minSeq {
 		minSeq = userMinSeq
 	}
-	var newSeqs []int64
+	if userMaxSeq > 0 && userMaxSeq < maxSeq {
+		maxSeq = userMaxSeq
+	}
+	newSeqs := make([]int64, 0, len(seqs))
 	for _, seq := range seqs {
+		if seq <= 0 {
+			continue
+		}
 		if seq >= minSeq && seq <= maxSeq {
 			newSeqs = append(newSeqs, seq)
 		}
+	}
+	if len(newSeqs) == 0 {
+		return minSeq, maxSeq, nil, nil
 	}
 	successMsgs, failedSeqs, err := db.msg.GetMessagesBySeq(ctx, conversationID, newSeqs)
 	if err != nil {
@@ -747,8 +764,8 @@ func (db *commonMsgDatabase) RangeGroupSendCount(
 	return db.msgDocDatabase.RangeGroupSendCount(ctx, start, end, ase, pageNumber, showNumber)
 }
 
-func (db *commonMsgDatabase) SearchMessage(ctx context.Context, req *pbmsg.SearchMessageReq) (total int64, msgData []*sdkws.MsgData, err error) {
-	var totalMsgs []*sdkws.MsgData
+func (db *commonMsgDatabase) SearchMessage(ctx context.Context, req *pbmsg.SearchMessageReq) (total int64, msgData []*pbmsg.SearchedMsgData, err error) {
+	var totalMsgs []*pbmsg.SearchedMsgData
 	total, msgs, err := db.msgDocDatabase.SearchMessage(ctx, req)
 	if err != nil {
 		return 0, nil, err
@@ -757,7 +774,13 @@ func (db *commonMsgDatabase) SearchMessage(ctx context.Context, req *pbmsg.Searc
 		if msg.IsRead {
 			msg.Msg.IsRead = true
 		}
-		totalMsgs = append(totalMsgs, convert.MsgDB2Pb(msg.Msg))
+		searchedMsgData := &pbmsg.SearchedMsgData{MsgData: convert.MsgDB2Pb(msg.Msg)}
+
+		if msg.Revoke != nil {
+			searchedMsgData.IsRevoked = true
+		}
+
+		totalMsgs = append(totalMsgs, searchedMsgData)
 	}
 	return total, totalMsgs, nil
 }
@@ -846,4 +869,17 @@ func (db *commonMsgDatabase) setMinSeq(ctx context.Context, conversationID strin
 
 func (db *commonMsgDatabase) GetDocIDs(ctx context.Context) ([]string, error) {
 	return db.msgDocDatabase.GetDocIDs(ctx)
+}
+
+func (db *commonMsgDatabase) GetCacheMaxSeqWithTime(ctx context.Context, conversationIDs []string) (map[string]database.SeqTime, error) {
+	return db.seqConversation.GetCacheMaxSeqWithTime(ctx, conversationIDs)
+}
+
+func (db *commonMsgDatabase) GetMaxSeqWithTime(ctx context.Context, conversationID string) (database.SeqTime, error) {
+	return db.seqConversation.GetMaxSeqWithTime(ctx, conversationID)
+}
+
+func (db *commonMsgDatabase) GetMaxSeqsWithTime(ctx context.Context, conversationIDs []string) (map[string]database.SeqTime, error) {
+	// todo: only the time in the redis cache will be taken, not the message time
+	return db.seqConversation.GetMaxSeqsWithTime(ctx, conversationIDs)
 }
